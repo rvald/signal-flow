@@ -195,3 +195,30 @@ func (r *PostgresSignalRepository) PromoteToTeam(ctx context.Context, signalID u
 		return nil
 	})
 }
+
+// FindBySourceURL returns the signal for the given source URL and tenant, or nil if not found.
+func (r *PostgresSignalRepository) FindBySourceURL(ctx context.Context, tenantID uuid.UUID, sourceURL string) (*domain.Signal, error) {
+	var result *domain.Signal
+
+	err := r.withTenantTx(ctx, tenantID, func(tx pgx.Tx) error {
+		query := fmt.Sprintf(`
+			SELECT %s
+			FROM signals
+			WHERE source_url = $1
+			LIMIT 1
+		`, selectSignalCols)
+
+		row := tx.QueryRow(ctx, query, sourceURL)
+		s, err := scanSignal(row)
+		if err != nil {
+			if err.Error() == "no rows in result set" {
+				return nil // Not found is not an error
+			}
+			return fmt.Errorf("find by source url: %w", err)
+		}
+		result = s
+		return nil
+	})
+
+	return result, err
+}

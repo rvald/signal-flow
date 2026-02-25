@@ -17,17 +17,17 @@ const (
 
 // Signal is the atomic unit of knowledge in Signal-Flow.
 type Signal struct {
-	ID           uuid.UUID              `json:"id"`
-	TenantID     uuid.UUID              `json:"tenant_id"`
-	SourceURL    string                 `json:"source_url"`
-	Title        string                 `json:"title"`
-	Content      string                 `json:"content"`
-	Distillation string                 `json:"distillation"`
-	Metadata     map[string]any         `json:"metadata"`
-	Scope        string                 `json:"scope"`
-	Vector       pgvector.Vector        `json:"vector"`
-	CreatedAt    time.Time              `json:"created_at"`
-	UpdatedAt    time.Time              `json:"updated_at"`
+	ID           uuid.UUID       `json:"id"`
+	TenantID     uuid.UUID       `json:"tenant_id"`
+	SourceURL    string          `json:"source_url"`
+	Title        string          `json:"title"`
+	Content      string          `json:"content"`
+	Distillation string          `json:"distillation"`
+	Metadata     map[string]any  `json:"metadata"`
+	Scope        string          `json:"scope"`
+	Vector       pgvector.Vector `json:"vector"`
+	CreatedAt    time.Time       `json:"created_at"`
+	UpdatedAt    time.Time       `json:"updated_at"`
 }
 
 // SignalRepository defines the contract for signal data access.
@@ -44,4 +44,7 @@ type SignalRepository interface {
 
 	// PromoteToTeam changes a signal's scope from private to team.
 	PromoteToTeam(ctx context.Context, signalID uuid.UUID, tenantID uuid.UUID) error
+
+	// FindBySourceURL returns the signal for the given source URL and tenant, or nil if not found.
+	FindBySourceURL(ctx context.Context, tenantID uuid.UUID, sourceURL string) (*Signal, error)
 }
