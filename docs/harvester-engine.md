@@ -59,7 +59,7 @@ signal-flow/
 
 ### Domain Layer
 
-- **Harvester interface** — [internal/domain/harvester.go](file:///home/rvald/signal-flow/internal/domain/harvester.go)
+- **Harvester interface** — [internal/domain/harvester.go](file:///signal-flow/internal/domain/harvester.go)
   - `Harvest(ctx, cred) ([]RawSignal, error)` — fetch new content using credential
   - `Provider() string` — returns platform identifier
 
@@ -67,19 +67,19 @@ signal-flow/
 
 - **Provider constants** — `ProviderBluesky`, `ProviderYouTube`, `ProviderGitHub`
 
-- **Credential extensions** — [internal/domain/identity.go](file:///home/rvald/signal-flow/internal/domain/identity.go)
+- **Credential extensions** — [internal/domain/identity.go](file:///signal-flow/internal/domain/identity.go)
   - `SessionID` — Bluesky OAuth session identifier
   - `AccountDID` — Bluesky AT Protocol DID
   - `SaveToken(ctx, credID, encryptedToken)` — persist rotated tokens
 
 ### Auth Layer
 
-- **TokenRefresher interface** — [internal/auth/refresher.go](file:///home/rvald/signal-flow/internal/auth/refresher.go)
+- **TokenRefresher interface** — [internal/auth/refresher.go](file:///signal-flow/internal/auth/refresher.go)
   - `Refresh(ctx, cred) (accessToken, error)` — decrypt, refresh if expired, re-encrypt, save
 
 - **TokenData struct** — `AccessToken`, `RefreshToken`, `TokenType`, `ExpiresAt`
 
-- **OAuth2Refresher** — [internal/auth/oauth2_refresher.go](file:///home/rvald/signal-flow/internal/auth/oauth2_refresher.go)
+- **OAuth2Refresher** — [internal/auth/oauth2_refresher.go](file:///signal-flow/internal/auth/oauth2_refresher.go)
   - Standard OAuth2 rotation for YouTube/GitHub
   - Decrypts stored token via `KeyManager`
   - Short-circuits if `ExpiresAt` > now + 30s
@@ -87,54 +87,54 @@ signal-flow/
   - Re-encrypts and persists via `TokenSaver`
   - Returns `AuthError` if refresh token is missing
 
-- **PostgresOAuthStore** — [internal/auth/bluesky_store.go](file:///home/rvald/signal-flow/internal/auth/bluesky_store.go)
+- **PostgresOAuthStore** — [internal/auth/bluesky_store.go](file:///signal-flow/internal/auth/bluesky_store.go)
   - Implements indigo's `oauth.ClientAuthStore` (6 methods)
   - Session methods: `Get/Save/DeleteSession` — JSON marshal → `KeyManager.Encrypt` → DB
   - Auth request methods: `Get/Save/DeleteAuthRequestInfo` — in-memory `sync.Map` with 30-min TTL
 
-- **Timeline types + ExtractLinksFromFeed** — [internal/auth/bluesky_timeline.go](file:///home/rvald/signal-flow/internal/auth/bluesky_timeline.go)
+- **Timeline types + ExtractLinksFromFeed** — [internal/auth/bluesky_timeline.go](file:///signal-flow/internal/auth/bluesky_timeline.go)
   - `TimelineResponse`, `TimelineFeedItem`, `TimelinePost`, `PostEmbed`, `EmbedExternal`
   - Filters for `app.bsky.embed.external` type → `[]RawSignal`
 
 ### Harvester Layer
 
-- **Coordinator** — [internal/harvester/service.go](file:///home/rvald/signal-flow/internal/harvester/service.go)
+- **Coordinator** — [internal/harvester/service.go](file:///signal-flow/internal/harvester/service.go)
   - `RunOnce(ctx)` — single harvest cycle: list credentials → harvest → dedup → synthesize
   - `Start(ctx, interval)` — background ticker loop wrapping `RunOnce`
   - Retry with exponential backoff (3 attempts, 100ms/200ms/400ms)
   - `AuthError` → `MarkNeedsReauth` (fatal, no retry)
   - SHA-256 URL hash as `LastSeenID` cursor
 
-- **Provider stubs** — [internal/harvester/providers/](file:///home/rvald/signal-flow/internal/harvester/providers/)
+- **Provider stubs** — [internal/harvester/providers/](file:///signal-flow/internal/harvester/providers/)
   - `BlueskyHarvester`, `YouTubeHarvester`, `GitHubHarvester` — implement `Harvester` interface
 
 ### Database Schema
 
-- **Migration 000003** — [000003_add_harvester_columns.up.sql](file:///home/rvald/signal-flow/migrations/000003_add_harvester_columns.up.sql)
+- **Migration 000003** — [000003_add_harvester_columns.up.sql](file:///signal-flow/migrations/000003_add_harvester_columns.up.sql)
   - `last_seen_id TEXT` — polling cursor per credential
   - `needs_reauth BOOLEAN` — flagged on 401 errors
 
-- **Migration 000004** — [000004_add_bluesky_session_columns.up.sql](file:///home/rvald/signal-flow/migrations/000004_add_bluesky_session_columns.up.sql)
+- **Migration 000004** — [000004_add_bluesky_session_columns.up.sql](file:///signal-flow/migrations/000004_add_bluesky_session_columns.up.sql)
   - `session_id TEXT` — Bluesky OAuth session ID
   - `account_did TEXT` — AT Protocol DID
 
 ### Tests
 
-- **Coordinator tests** — [internal/harvester/service_test.go](file:///home/rvald/signal-flow/internal/harvester/service_test.go)
+- **Coordinator tests** — [internal/harvester/service_test.go](file:///signal-flow/internal/harvester/service_test.go)
   - `Test_Dispatch_To_Providers` — 3 providers, credential routing
   - `Test_Dedup_Existing_Signals` — duplicate URL → skipped
   - `Test_AuthError_Marks_Reauth` — 401 → `MarkNeedsReauth`
   - `Test_Retry_Transient_Errors` — 3 retries with backoff
   - `Test_Multiple_Credentials_Per_Provider` — fan-out per provider
 
-- **OAuth2Refresher tests** — [internal/auth/refresher_test.go](file:///home/rvald/signal-flow/internal/auth/refresher_test.go)
+- **OAuth2Refresher tests** — [internal/auth/refresher_test.go](file:///signal-flow/internal/auth/refresher_test.go)
   - `Test_Token_Rotation_Logic` — rotate, re-encrypt, save
   - `Test_Encryption_Boundary` — tokens always encrypted
   - `Test_Provider_Isolation` — YouTube 429 doesn't affect Bluesky
   - `Test_Unexpired_Token_NoRefresh` — valid token → no API call
   - `Test_Missing_RefreshToken_AuthError` — missing refresh → `AuthError`
 
-- **Bluesky tests** — [internal/auth/bluesky_test.go](file:///home/rvald/signal-flow/internal/auth/bluesky_test.go)
+- **Bluesky tests** — [internal/auth/bluesky_test.go](file:///signal-flow/internal/auth/bluesky_test.go)
   - `Test_BlueskyStore_SaveAndGet_RoundTrip` — encrypt/decrypt cycle
   - `Test_BlueskyStore_Encryption_AtRest` — raw DB bytes are not JSON
   - `Test_BlueskyStore_DeleteSession` — delete → get fails
