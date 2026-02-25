@@ -93,3 +93,69 @@ func (r *PostgresIdentityRepository) ListUsersByProvider(ctx context.Context, pr
 
 	return users, rows.Err()
 }
+
+// ListActiveCredentials returns all credentials for a provider that do not need reauthentication.
+func (r *PostgresIdentityRepository) ListActiveCredentials(ctx context.Context, provider string) ([]*domain.Credential, error) {
+	query := `
+		SELECT id, user_id, provider, encrypted_token, provider_user_id,
+		       last_seen_id, needs_reauth, expires_at, created_at, updated_at
+		FROM user_credentials
+		WHERE provider = $1 AND needs_reauth = false
+	`
+
+	rows, err := r.pool.Query(ctx, query, provider)
+	if err != nil {
+		return nil, fmt.Errorf("query active credentials: %w", err)
+	}
+	defer rows.Close()
+
+	var creds []*domain.Credential
+	for rows.Next() {
+		c := &domain.Credential{}
+		if err := rows.Scan(
+			&c.ID, &c.UserID, &c.Provider, &c.EncryptedToken, &c.ProviderUserID,
+			&c.LastSeenID, &c.NeedsReauth, &c.ExpiresAt, &c.CreatedAt, &c.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan credential: %w", err)
+		}
+		creds = append(creds, c)
+	}
+
+	return creds, rows.Err()
+}
+
+// UpdateLastSeenID sets the polling cursor for a credential.
+func (r *PostgresIdentityRepository) UpdateLastSeenID(ctx context.Context, credentialID uuid.UUID, lastSeenID string) error {
+	_, err := r.pool.Exec(ctx,
+		"UPDATE user_credentials SET last_seen_id = $1, updated_at = now() WHERE id = $2",
+		lastSeenID, credentialID,
+	)
+	if err != nil {
+		return fmt.Errorf("update last_seen_id: %w", err)
+	}
+	return nil
+}
+
+// MarkNeedsReauth flags a credential as requiring reauthentication.
+func (r *PostgresIdentityRepository) MarkNeedsReauth(ctx context.Context, credentialID uuid.UUID) error {
+	_, err := r.pool.Exec(ctx,
+		"UPDATE user_credentials SET needs_reauth = true, updated_at = now() WHERE id = $1",
+		credentialID,
+	)
+	if err != nil {
+		return fmt.Errorf("mark needs_reauth: %w", err)
+	}
+	return nil
+}
+
+// SaveToken updates the encrypted token for a credential (used after token rotation).
+func (r *PostgresIdentityRepository) SaveToken(ctx context.Context, credentialID uuid.UUID, encryptedToken []byte) error {
+	_, err := r.pool.Exec(ctx,
+		"UPDATE user_credentials SET encrypted_token = $1, updated_at = now() WHERE id = $2",
+		encryptedToken, credentialID,
+	)
+	if err != nil {
+		return fmt.Errorf("save token: %w", err)
+	}
+	return nil
+}
