@@ -26,7 +26,16 @@ The HTTP interface for Signal-Flow. Exposes all domain services over REST using 
 
 ```
 signal-flow/
-├── cmd/signal-flow/main.go                              # Server entrypoint + wiring
+├── cmd/signal-flow/
+│   ├── main.go                                          # CLI entrypoint (Cobra root command)
+│   └── cli/
+│       ├── root.go                                      # Root command + subcommand registration
+│       ├── bluesky.go                                   # login command
+│       ├── bluesky_resolve.go                           # Session resolver (auto-refresh)
+│       ├── feed.go                                      # feed command (timeline links)
+│       ├── harvest.go                                   # harvest command (timeline → DB)
+│       ├── logout.go                                    # logout command
+│       └── constants.go                                 # devTenantID
 ├── internal/
 │   └── api/
 │       ├── response.go                                  # JSON/Error response helpers
@@ -41,6 +50,8 @@ signal-flow/
     ├── 000005_seed_dev_user.up.sql                      # Dev user seed
     └── 000005_seed_dev_user.down.sql                    # Rollback
 ```
+
+> **Note:** The project has shifted to CLI-first. The HTTP API handlers still exist and are tested, but the primary interface is now the CLI (`signal-flow login`, `feed`, `harvest`). A future `signal-flow serve` command can re-expose the HTTP API.
 
 ## Source Index
 
@@ -76,15 +87,12 @@ signal-flow/
 | `/api/synthesize` | `POST` | `SynthesizeHandler` | `Synthesize` — body: `{ "source_url", "content", "priority" }` |
 | `/api/harvest` | `POST` | `HarvesterHandler` | `RunOnce` — triggers single harvest cycle |
 
-### Server Entrypoint
+### CLI Entrypoint
 
 - **main.go** — [cmd/signal-flow/main.go](file:///signal-flow/cmd/signal-flow/main.go)
-  - Env config: `PORT` (default `8088`), `DATABASE_URL`, `ENCRYPTION_KEY` (hex)
-  - Connects `pgxpool`, instantiates `LocalKeyManager`
-  - Wires: `PostgresSignalRepository`, `PostgresIdentityRepository`
-  - Middleware chain: `Recovery → Logging → TenantContext`
-  - Graceful shutdown on `SIGINT` / `SIGTERM`
-  - Synthesizer returns 503 if no LLM keys, Harvester returns 503 until provider wiring
+  - Cobra CLI with context cancellation on `SIGINT` / `SIGTERM`
+  - Dispatches to subcommands: `login`, `feed`, `harvest`, `logout`, `version`
+  - HTTP API handlers are still available but not wired to a `serve` command yet
 
 ### Database Schema
 
@@ -120,19 +128,10 @@ signal-flow/
 # API unit tests (fast, no Docker)
 go test ./internal/api/... -v -count=1
 
-# Start dev server
-docker compose up -d
-psql -h localhost -p 5433 -U signalflow -d signal_flow_dev \
-  -f migrations/000001_create_signals_table.up.sql \
-  -f migrations/000002_create_identity_tables.up.sql \
-  -f migrations/000003_add_harvester_columns.up.sql \
-  -f migrations/000004_add_bluesky_session_columns.up.sql \
-  -f migrations/000005_seed_dev_user.up.sql
+# CLI usage (see docs/harvester-engine.md for full auth flow)
+go run ./cmd/signal-flow login --identifier "you.bsky.social" --password "your-app-password"
+go run ./cmd/signal-flow feed
 
-ENCRYPTION_KEY=$(openssl rand -hex 16) go run ./cmd/signal-flow
-
-# Test
-curl localhost:8088/api/health
-curl -H "X-Tenant-ID: 00000000-0000-0000-0000-000000000001" \
-  localhost:8088/api/signals
+# Full suite (Phase 1+2 need Docker for testcontainers)
+go test ./... -v -count=1
 ```

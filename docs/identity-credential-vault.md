@@ -65,7 +65,9 @@ signal-flow/
   - Fields: `ID`, `Email`, `CreatedAt`
 
 - **Credential struct** — [internal/domain/identity.go](file:///signal-flow/internal/domain/identity.go)
-  - Fields: `ID`, `UserID`, `Provider`, `EncryptedToken` (BYTEA), `ProviderUserID`, `ExpiresAt`, `CreatedAt`, `UpdatedAt`
+  - Fields: `ID`, `UserID`, `Provider`, `EncryptedToken` (BYTEA), `ProviderUserID`, `LastSeenID`, `NeedsReauth`, `SessionID`, `AccountDID`, `ExpiresAt`, `CreatedAt`, `UpdatedAt`
+
+> **Note:** For CLI usage, Bluesky auth is now handled via app passwords stored in a local config file (`~/.config/signal-flow/session.json`), not in the database credential vault. See [harvester-engine.md](file:///signal-flow/docs/harvester-engine.md) for the CLI auth flow. The credential vault remains available for server-mode multi-user auth.
 
 - **IdentityRepository interface** — [internal/domain/identity.go](file:///signal-flow/internal/domain/identity.go)
   - `LinkProvider(ctx, userID, provider, rawToken) error` — encrypt + upsert
