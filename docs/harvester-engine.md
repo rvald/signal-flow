@@ -30,8 +30,9 @@ The data collection backbone of Signal-Flow. Content harvesting from Bluesky wit
 signal-flow/
 ├── cmd/signal-flow/cli/
 │   ├── bluesky.go                                     # login command (ServerCreateSession → config file)
-│   ├── bluesky_resolve.go                             # Session resolver (auto-refresh)
-│   ├── feed.go                                        # feed command (read-only timeline links)
+│   ├── bluesky_resolve.go                             # Session resolver, expired-token helpers
+│   ├── feed.go                                        # feed command (timeline links + --follows filter)
+│   ├── following.go                                   # following command (list followed accounts)
 │   ├── harvest.go                                     # harvest command (timeline → DB signals)
 │   ├── logout.go                                      # logout command (clear session)
 │   └── constants.go                                   # devTenantID
@@ -104,6 +105,8 @@ signal-flow/
 
 - **Timeline types + ExtractLinksFromFeed** — [internal/auth/bluesky_timeline.go](file:///signal-flow/internal/auth/bluesky_timeline.go)
   - `TimelineResponse`, `TimelineFeedItem`, `TimelinePost`, `PostEmbed`, `EmbedExternal`
+  - `PostAuthor` struct — `DID`, `Handle`, `DisplayName` (populated from SDK)
+  - `FilterByFollows(items, followDIDs)` — filters feed items to followed accounts only
   - Filters for `app.bsky.embed.external` type → `[]RawSignal`
 
 ### Config Layer
@@ -122,6 +125,12 @@ signal-flow/
 
 - **feed** — [cmd/signal-flow/cli/feed.go](file:///signal-flow/cmd/signal-flow/cli/feed.go)
   - Read-only timeline link extraction, no DB required
+  - `--follows` flag filters to posts from followed accounts (all posts, not just links)
+  - Flags: `--limit`, `--json`, `--follows`
+
+- **following** — [cmd/signal-flow/cli/following.go](file:///signal-flow/cmd/signal-flow/cli/following.go)
+  - Lists all accounts the user follows, paginating through `GraphGetFollows`
+  - `FollowInfo` struct — `DID`, `Handle`, `DisplayName`
   - Flags: `--limit`, `--json`
 
 - **harvest** — [cmd/signal-flow/cli/harvest.go](file:///signal-flow/cmd/signal-flow/cli/harvest.go)
@@ -134,7 +143,12 @@ signal-flow/
 
 - **resolveBlueskyClient** — [cmd/signal-flow/cli/bluesky_resolve.go](file:///signal-flow/cmd/signal-flow/cli/bluesky_resolve.go)
   - Loads session → refreshes JWTs → returns `*xrpc.Client`
-  - Falls back to stored access token if refresh fails
+  - Detects `ExpiredToken` on refresh failure → returns friendly re-login message
+  - Falls back to stored access token only for non-auth errors (network, etc.)
+
+- **Expired-token helpers** — [cmd/signal-flow/cli/bluesky_resolve.go](file:///signal-flow/cmd/signal-flow/cli/bluesky_resolve.go)
+  - `isExpiredTokenErr(err)` — detects `xrpc.XRPCError` with `ErrStr == "ExpiredToken"`
+  - `wrapExpiredTokenErr(err)` — wraps with friendly `signal-flow login` instructions
 
 ### Harvester Layer
 
@@ -176,6 +190,8 @@ signal-flow/
 
 - **Bluesky tests** — [internal/auth/bluesky_test.go](file:///signal-flow/internal/auth/bluesky_test.go)
   - `Test_BlueskyHarvester_ExtractLinks` — external links only → `RawSignal`
+  - `Test_FilterByFollows` — filters feed items to followed DIDs
+  - `Test_PostAuthor_Populated` — verifies author fields populated from SDK data
 
 - **Config tests** — [internal/config/config_test.go](file:///signal-flow/internal/config/config_test.go)
   - `TestSaveAndLoad_RoundTrip` — save session → load → fields match
@@ -188,6 +204,7 @@ signal-flow/
 - **App-password over OAuth** — CLI doesn't need browser-redirect flow. App passwords give the same JWTs via `ServerCreateSession`. Simpler, no callback server needed.
 - **Local config file over DB** — `~/.config/signal-flow/session.json` means `signal-flow login` works without Postgres. DB only needed for `harvest` (storing signals).
 - **Auto-refresh** — `resolveBlueskyClient` transparently refreshes JWTs via `ServerRefreshSession` before every command. Falls back to stored access token if refresh fails.
+- **Graceful expired-token handling** — When the refresh token itself is expired, `resolveBlueskyClient` returns a user-friendly message instructing re-login via `signal-flow login` instead of an opaque XRPC error. All downstream API call sites (`feed`, `following`, `harvest`) also wrap errors with `wrapExpiredTokenErr`.
 - **`TokenRefresher` interface** — Per-provider abstraction. YouTube/GitHub share `OAuth2Refresher`; Bluesky uses `RefreshBlueskySession`.
 - **`ExtractLinksFromFeed` as pure function** — Testable without SDK or network. Filters by embed `$type` containing "external".
 - **30-second expiry buffer** — `OAuth2Refresher` refreshes tokens 30s before expiry to avoid clock skew edge cases.
@@ -209,6 +226,9 @@ go test ./internal/harvester/... -v -count=1
 go run ./cmd/signal-flow login --identifier "you.bsky.social" --password "your-app-password"
 go run ./cmd/signal-flow feed
 go run ./cmd/signal-flow feed --json --limit 10
+go run ./cmd/signal-flow feed --follows
+go run ./cmd/signal-flow following
+go run ./cmd/signal-flow following --json --limit 50
 go run ./cmd/signal-flow harvest --dry-run
 DATABASE_URL=... ENCRYPTION_KEY=... go run ./cmd/signal-flow harvest
 go run ./cmd/signal-flow logout

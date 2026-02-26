@@ -31,9 +31,11 @@ var (
 
 func NewRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "signal-flow",
-		Short: "Signal-Flow CLI",
-		Long:  "A command-line interface for Signal-Flow" + gettingStarted + accessibilityHelp,
+		Use:           "signal-flow",
+		Short:         "Signal-Flow CLI",
+		Long:          "A command-line interface for Signal-Flow" + gettingStarted + accessibilityHelp,
+		SilenceUsage:  true,
+		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return cmd.Help()
 		},
@@ -43,6 +45,7 @@ func NewRootCmd() *cobra.Command {
 	cmd.AddCommand(newVersionCmd())
 	cmd.AddCommand(newLoginCmd())
 	cmd.AddCommand(newFeedCmd())
+	cmd.AddCommand(newFollowingCmd())
 	cmd.AddCommand(newHarvestCmd())
 	cmd.AddCommand(newLogoutCmd())
 

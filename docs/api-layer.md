@@ -31,8 +31,9 @@ signal-flow/
 │   └── cli/
 │       ├── root.go                                      # Root command + subcommand registration
 │       ├── bluesky.go                                   # login command
-│       ├── bluesky_resolve.go                           # Session resolver (auto-refresh)
-│       ├── feed.go                                      # feed command (timeline links)
+│       ├── bluesky_resolve.go                           # Session resolver, expired-token helpers
+│       ├── feed.go                                      # feed command (timeline links + --follows)
+│       ├── following.go                                 # following command (list followed accounts)
 │       ├── harvest.go                                   # harvest command (timeline → DB)
 │       ├── logout.go                                    # logout command
 │       └── constants.go                                 # devTenantID
@@ -51,7 +52,7 @@ signal-flow/
     └── 000005_seed_dev_user.down.sql                    # Rollback
 ```
 
-> **Note:** The project has shifted to CLI-first. The HTTP API handlers still exist and are tested, but the primary interface is now the CLI (`signal-flow login`, `feed`, `harvest`). A future `signal-flow serve` command can re-expose the HTTP API.
+> **Note:** The project has shifted to CLI-first. The HTTP API handlers still exist and are tested, but the primary interface is now the CLI (`signal-flow login`, `feed`, `following`, `harvest`). A future `signal-flow serve` command can re-expose the HTTP API.
 
 ## Source Index
 
@@ -91,7 +92,8 @@ signal-flow/
 
 - **main.go** — [cmd/signal-flow/main.go](file:///signal-flow/cmd/signal-flow/main.go)
   - Cobra CLI with context cancellation on `SIGINT` / `SIGTERM`
-  - Dispatches to subcommands: `login`, `feed`, `harvest`, `logout`, `version`
+  - Dispatches to subcommands: `login`, `feed`, `following`, `harvest`, `logout`, `version`
+  - `SilenceUsage` + `SilenceErrors` on root command — errors print once via `main.go`, no usage dump on non-usage errors
   - HTTP API handlers are still available but not wired to a `serve` command yet
 
 ### Database Schema
@@ -121,6 +123,7 @@ signal-flow/
 - **Nil-safe handlers** — `SynthesizeHandler` and `HarvesterHandler` return 503 when their service is nil, allowing partial server startup.
 - **Deterministic dev UUID** — `00000000-...-000000000001` makes curl commands copy-pasteable across machines.
 - **`ExportedTenantKey`** — Tests inject tenant context directly into request context, bypassing middleware. Avoids coupling test structure to middleware internals.
+- **`SilenceUsage` + `SilenceErrors`** — Prevents Cobra from printing usage on runtime errors (e.g. expired tokens) and avoids duplicate error output. Errors are printed once by `main.go`.
 
 ## Running
 
@@ -131,6 +134,7 @@ go test ./internal/api/... -v -count=1
 # CLI usage (see docs/harvester-engine.md for full auth flow)
 go run ./cmd/signal-flow login --identifier "you.bsky.social" --password "your-app-password"
 go run ./cmd/signal-flow feed
+go run ./cmd/signal-flow following
 
 # Full suite (Phase 1+2 need Docker for testcontainers)
 go test ./... -v -count=1

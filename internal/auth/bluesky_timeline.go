@@ -14,10 +14,18 @@ type TimelineFeedItem struct {
 
 // TimelinePost represents a Bluesky post in the timeline.
 type TimelinePost struct {
-	URI    string     `json:"uri"`    // at:// URI
-	CID    string     `json:"cid"`    // Content ID
-	Record PostRecord `json:"record"` // Post content
-	Embed  *PostEmbed `json:"embed"`  // Embedded content (links, images, etc.)
+	URI    string      `json:"uri"`    // at:// URI
+	CID    string      `json:"cid"`    // Content ID
+	Author *PostAuthor `json:"author"` // Post author
+	Record PostRecord  `json:"record"` // Post content
+	Embed  *PostEmbed  `json:"embed"`  // Embedded content (links, images, etc.)
+}
+
+// PostAuthor identifies the author of a Bluesky post.
+type PostAuthor struct {
+	DID         string `json:"did"`
+	Handle      string `json:"handle"`
+	DisplayName string `json:"display_name,omitempty"`
 }
 
 // PostRecord contains the text content of a Bluesky post.
@@ -68,18 +76,36 @@ func ExtractLinksFromFeed(feed []TimelineFeedItem) []domain.RawSignal {
 		}
 
 		ext := item.Post.Embed.External
+		metadata := map[string]any{
+			"at_uri": item.Post.URI,
+			"cid":    item.Post.CID,
+		}
+
+		if item.Post.Author != nil {
+			metadata["author_did"] = item.Post.Author.DID
+			metadata["author_handle"] = item.Post.Author.Handle
+		}
+
 		signals = append(signals, domain.RawSignal{
 			SourceURL:   ext.URI,
 			Title:       ext.Title,
 			Content:     item.Post.Record.Text,
 			Provider:    domain.ProviderBluesky,
 			HarvestedAt: time.Now(),
-			Metadata: map[string]any{
-				"at_uri": item.Post.URI,
-				"cid":    item.Post.CID,
-			},
+			Metadata:    metadata,
 		})
 	}
 
 	return signals
+}
+
+// FilterByFollows returns only feed items authored by accounts in the followDIDs set.
+func FilterByFollows(feed []TimelineFeedItem, followDIDs map[string]bool) []TimelineFeedItem {
+	var filtered []TimelineFeedItem
+	for _, item := range feed {
+		if item.Post.Author != nil && followDIDs[item.Post.Author.DID] {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
 }

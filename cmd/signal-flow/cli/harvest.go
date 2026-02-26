@@ -48,7 +48,7 @@ func runHarvest(ctx context.Context, limit int64, dryRun bool) error {
 	// --- Fetch timeline ---
 	resp, err := bsky.FeedGetTimeline(ctx, client, "", "", limit)
 	if err != nil {
-		return fmt.Errorf("fetch timeline: %w", err)
+		return wrapExpiredTokenErr(fmt.Errorf("fetch timeline: %w", err))
 	}
 
 	// --- Extract links ---
