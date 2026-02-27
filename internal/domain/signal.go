@@ -47,4 +47,7 @@ type SignalRepository interface {
 
 	// FindBySourceURL returns the signal for the given source URL and tenant, or nil if not found.
 	FindBySourceURL(ctx context.Context, tenantID uuid.UUID, sourceURL string) (*Signal, error)
+
+	// FindUnsynthesized returns signals that have not been synthesized yet, ordered by newest first.
+	FindUnsynthesized(ctx context.Context, tenantID uuid.UUID, limit int) ([]*Signal, error)
 }

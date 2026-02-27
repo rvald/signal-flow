@@ -9,13 +9,15 @@ import (
 
 	"github.com/rvald/signal-flow/internal/domain"
 	"github.com/rvald/signal-flow/internal/intelligence/prompts"
+	"golang.org/x/time/rate"
 	"google.golang.org/genai"
 )
 
 // GeminiSummarizer implements domain.Summarizer using the Google Gemini API.
 type GeminiSummarizer struct {
-	client *genai.Client
-	model  string
+	client  *genai.Client
+	model   string
+	limiter *rate.Limiter
 }
 
 // NewGeminiSummarizer creates a GeminiSummarizer using the given API key and model.
@@ -29,11 +31,23 @@ func NewGeminiSummarizer(ctx context.Context, apiKey, model string) (*GeminiSumm
 		return nil, fmt.Errorf("intelligence: create gemini client: %w", err)
 	}
 
-	return &GeminiSummarizer{client: client, model: model}, nil
+	// 5 requests per minute = 1 request every 12 seconds
+	limit := rate.Every(12 * time.Second)
+	limiter := rate.NewLimiter(limit, 1)
+
+	return &GeminiSummarizer{
+		client:  client,
+		model:   model,
+		limiter: limiter,
+	}, nil
 }
 
 // Summarize generates a full technical brief using the Gemini model.
 func (g *GeminiSummarizer) Summarize(ctx context.Context, content string, params domain.ContextParams) (*domain.Summary, *domain.LLMUsage, error) {
+	if err := g.limiter.Wait(ctx); err != nil {
+		return nil, nil, fmt.Errorf("intelligence: gemini rate limiter: %w", err)
+	}
+
 	start := time.Now()
 
 	userPrompt := prompts.FormatDistillationUserPrompt(content, "")
@@ -67,6 +81,10 @@ func (g *GeminiSummarizer) Summarize(ctx context.Context, content string, params
 
 // ExtractMetadata identifies tech stack tags and high-signal markers using the Gemini model.
 func (g *GeminiSummarizer) ExtractMetadata(ctx context.Context, content string) ([]string, bool, *domain.LLMUsage, error) {
+	if err := g.limiter.Wait(ctx); err != nil {
+		return nil, false, nil, fmt.Errorf("intelligence: gemini rate limiter: %w", err)
+	}
+
 	start := time.Now()
 
 	userPrompt := prompts.FormatAnalysisUserPrompt(content)

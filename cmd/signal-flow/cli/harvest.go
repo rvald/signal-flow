@@ -19,24 +19,29 @@ import (
 func newHarvestCmd() *cobra.Command {
 	var limit int64
 	var dryRun bool
+	var followsOnly bool
 
 	cmd := &cobra.Command{
 		Use:   "harvest",
 		Short: "Fetch timeline links and store as signals",
 		Long: `Fetches your Bluesky timeline, extracts links, and stores them as
-Signals in PostgreSQL. Requires DATABASE_URL and ENCRYPTION_KEY env vars.`,
+Signals in PostgreSQL. Requires DATABASE_URL and ENCRYPTION_KEY env vars.
+
+By default, harvests all timeline links. Use --follows to limit to posts
+from accounts you follow.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runHarvest(cmd.Context(), limit, dryRun)
+			return runHarvest(cmd.Context(), limit, dryRun, followsOnly)
 		},
 	}
 
 	cmd.Flags().Int64Var(&limit, "limit", 50, "number of timeline posts to fetch")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "preview links without saving to database")
+	cmd.Flags().BoolVar(&followsOnly, "follows", false, "only harvest links from accounts you follow")
 
 	return cmd
 }
 
-func runHarvest(ctx context.Context, limit int64, dryRun bool) error {
+func runHarvest(ctx context.Context, limit int64, dryRun, followsOnly bool) error {
 	// --- Auth (from config file) ---
 	client, session, err := resolveBlueskyClient(ctx)
 	if err != nil {
@@ -51,40 +56,16 @@ func runHarvest(ctx context.Context, limit int64, dryRun bool) error {
 		return wrapExpiredTokenErr(fmt.Errorf("fetch timeline: %w", err))
 	}
 
-	// --- Extract links ---
-	var feedItems []auth.TimelineFeedItem
-	for _, item := range resp.Feed {
-		if item.Post == nil || item.Post.Record == nil {
-			continue
-		}
+	// --- Extract links (reuse shared helper from feed.go) ---
+	feedItems := sdkFeedToTimeline(resp.Feed)
 
-		fi := auth.TimelineFeedItem{
-			Post: auth.TimelinePost{
-				URI: item.Post.Uri,
-				CID: item.Post.Cid,
-			},
+	// --- Filter by follows if requested ---
+	if followsOnly {
+		followDIDs, err := fetchFollowDIDs(ctx, client, session.DID)
+		if err != nil {
+			return wrapExpiredTokenErr(fmt.Errorf("fetch follows: %w", err))
 		}
-
-		if rec, ok := item.Post.Record.Val.(*bsky.FeedPost); ok {
-			fi.Post.Record = auth.PostRecord{
-				Text: rec.Text,
-			}
-		}
-
-		if item.Post.Embed != nil {
-			if ext := item.Post.Embed.EmbedExternal_View; ext != nil && ext.External != nil {
-				fi.Post.Embed = &auth.PostEmbed{
-					Type: "app.bsky.embed.external#view",
-					External: &auth.EmbedExternal{
-						URI:         ext.External.Uri,
-						Title:       ext.External.Title,
-						Description: ext.External.Description,
-					},
-				}
-			}
-		}
-
-		feedItems = append(feedItems, fi)
+		feedItems = auth.FilterByFollows(feedItems, followDIDs)
 	}
 
 	signals := auth.ExtractLinksFromFeed(feedItems)

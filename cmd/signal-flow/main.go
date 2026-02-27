@@ -6,11 +6,16 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	
+	"github.com/joho/godotenv"
 	"github.com/rvald/signal-flow/cmd/signal-flow/cli"
 )
 
 func main() {
+	// Load .env file
+	err := godotenv.Load("../../.env")
+	if err != nil {
+		fmt.Println("Error loading .env file")
+	}
 	// Create context that cancels on interrupt
 	ctx, cancel := context.WithCancel(context.Background())
 

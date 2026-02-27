@@ -53,6 +53,9 @@ signal-flow/
   - `FindRecentByTenant(ctx, tenantID, limit) ([]*Signal, error)`
   - `SearchSemantic(ctx, tenantID, vector, limit) ([]*Signal, error)`
   - `PromoteToTeam(ctx, signalID, tenantID) error`
+  - `FindBySourceURL(ctx, tenantID, sourceURL) (*Signal, error)`
+  - `FindUnsynthesized(ctx, tenantID, limit) ([]*Signal, error)`
+
 
 ### Repository Layer
 
@@ -64,6 +67,9 @@ signal-flow/
   - `FindRecentByTenant` — `ORDER BY created_at DESC LIMIT $1`
   - `SearchSemantic` — `ORDER BY vector <=> $1 LIMIT $2` (cosine distance)
   - `PromoteToTeam` — `UPDATE signals SET scope = 'team' WHERE id = $1`
+  - `FindBySourceURL` — Returns a single signal matching a source URL
+  - `FindUnsynthesized` — `WHERE distillation = '' OR distillation IS NULL ORDER BY created_at DESC`
+
 
 ### Database Schema
 

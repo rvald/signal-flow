@@ -79,6 +79,10 @@ func (m *mockSignalRepo) PromoteToTeam(_ context.Context, _ uuid.UUID, _ uuid.UU
 	return nil
 }
 
+func (m *mockSignalRepo) FindUnsynthesized(_ context.Context, _ uuid.UUID, _ int) ([]*domain.Signal, error) {
+	return nil, nil
+}
+
 // =============================================================================
 // Test_Token_Tracker
 // Verifies that UsageTracker correctly aggregates token counts and latency

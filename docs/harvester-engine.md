@@ -136,7 +136,7 @@ signal-flow/
 - **harvest** — [cmd/signal-flow/cli/harvest.go](file:///signal-flow/cmd/signal-flow/cli/harvest.go)
   - Fetches timeline, stores signals to Postgres
   - Reads `DATABASE_URL` and `ENCRYPTION_KEY` from env vars
-  - Flags: `--limit`, `--dry-run`
+  - Flags: `--limit`, `--dry-run`, `--follows`
 
 - **logout** — [cmd/signal-flow/cli/logout.go](file:///signal-flow/cmd/signal-flow/cli/logout.go)
   - Clears stored session file
@@ -230,7 +230,9 @@ go run ./cmd/signal-flow feed --follows
 go run ./cmd/signal-flow following
 go run ./cmd/signal-flow following --json --limit 50
 go run ./cmd/signal-flow harvest --dry-run
+go run ./cmd/signal-flow harvest --dry-run --follows
 DATABASE_URL=... ENCRYPTION_KEY=... go run ./cmd/signal-flow harvest
+DATABASE_URL=... ENCRYPTION_KEY=... go run ./cmd/signal-flow harvest --follows
 go run ./cmd/signal-flow logout
 
 # Full suite (Phase 1+2 need Docker for testcontainers)

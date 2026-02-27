@@ -9,8 +9,10 @@ import (
 type Priority int
 
 const (
-	// PriorityStandard routes to the Flash tier for all passes.
-	PriorityStandard Priority = iota
+	// PriorityLow forces the Flash tier for all passes, ignoring high-signal markers.
+	PriorityLow Priority = iota
+	// PriorityStandard routes to the Flash tier for all passes unless high-signal markers are found.
+	PriorityStandard
 	// PriorityHigh forces the Reasoning tier for the distillation pass.
 	PriorityHigh
 )

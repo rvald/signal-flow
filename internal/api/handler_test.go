@@ -31,8 +31,12 @@ func (f *fakeSignalRepo) FindRecentByTenant(_ context.Context, _ uuid.UUID, limi
 func (f *fakeSignalRepo) SearchSemantic(_ context.Context, _ uuid.UUID, _ pgvector.Vector, limit int) ([]*domain.Signal, error) {
 	return f.signals, nil
 }
-func (f *fakeSignalRepo) PromoteToTeam(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
+func (f *fakeSignalRepo) PromoteToTeam(ctx context.Context, signalID uuid.UUID, tenantID uuid.UUID) error {
 	return nil
+}
+
+func (f *fakeSignalRepo) FindUnsynthesized(ctx context.Context, tenantID uuid.UUID, limit int) ([]*domain.Signal, error) {
+	return nil, nil
 }
 func (f *fakeSignalRepo) FindBySourceURL(_ context.Context, _ uuid.UUID, _ string) (*domain.Signal, error) {
 	return nil, nil

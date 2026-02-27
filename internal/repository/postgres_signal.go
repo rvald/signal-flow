@@ -222,3 +222,36 @@ func (r *PostgresSignalRepository) FindBySourceURL(ctx context.Context, tenantID
 
 	return result, err
 }
+
+// FindUnsynthesized returns signals that have not been synthesized yet, ordered by newest first.
+func (r *PostgresSignalRepository) FindUnsynthesized(ctx context.Context, tenantID uuid.UUID, limit int) ([]*domain.Signal, error) {
+	var results []*domain.Signal
+
+	err := r.withTenantTx(ctx, tenantID, func(tx pgx.Tx) error {
+		query := fmt.Sprintf(`
+			SELECT %s
+			FROM signals
+			WHERE distillation = '' OR distillation IS NULL
+			ORDER BY created_at DESC
+			LIMIT $1
+		`, selectSignalCols)
+
+		rows, err := tx.Query(ctx, query, limit)
+		if err != nil {
+			return fmt.Errorf("query unsynthesized signals: %w", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			s, err := scanSignal(rows)
+			if err != nil {
+				return fmt.Errorf("scan signal: %w", err)
+			}
+			results = append(results, s)
+		}
+
+		return rows.Err()
+	})
+
+	return results, err
+}

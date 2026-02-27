@@ -59,9 +59,12 @@ func (s *SynthesizerService) Synthesize(
 
 	// --- Routing Decision ---
 	var summarizer domain.Summarizer
-	if params.Priority == domain.PriorityHigh || isHighSignal {
+	switch {
+	case params.Priority == domain.PriorityLow:
+		summarizer = s.flash
+	case params.Priority == domain.PriorityHigh || isHighSignal:
 		summarizer = s.reasoning
-	} else {
+	default:
 		summarizer = s.flash
 	}
 

@@ -28,9 +28,11 @@ The "Brain" of Signal-Flow. A multi-pass LLM orchestration pipeline that transfo
 
 ```
 signal-flow/
+├── cmd/signal-flow/cli/
+│   └── synthesize.go              # CLI command for manual LLM pipelining
 ├── internal/
 │   ├── domain/
-│   │   ├── signal.go              # Phase 1 (+ FindBySourceURL)
+│   │   ├── signal.go              # Phase 1 (+ FindBySourceURL, FindUnsynthesized)
 │   │   ├── identity.go            # Phase 2
 │   │   └── intelligence.go        # Summary, Summarizer, LLMUsage types
 │   ├── intelligence/
@@ -90,6 +92,16 @@ signal-flow/
   - Idempotency check via `SignalRepository.FindBySourceURL`
   - Persists results to `Signal.Distillation` and `Signal.Metadata`
 
+### CLI Commands
+
+- **synthesize** — [cmd/signal-flow/cli/synthesize.go](file:///signal-flow/cmd/signal-flow/cli/synthesize.go)
+  - Processes unsynthesized signals or a specific URL via the intelligence pipeline
+  - Requires `DATABASE_URL`, `ENCRYPTION_KEY`, and provider API keys
+  - Supports dynamic provider routing (`gemini`, `claude`, `openai`)
+  - Supports `--effort` tier routing (`low` = flash only, `high` = reasoning for Pass 2)
+  - Flags: `--provider`, `--effort`, `--limit`, `--url`
+
+
 ### Prompt Templates
 
 - **Analysis (Pass 1)** — [internal/intelligence/prompts/analysis.go](file:///signal-flow/internal/intelligence/prompts/analysis.go)
@@ -135,4 +147,17 @@ go test ./... -v -count=1
 GEMINI_API_KEY=your-gemini-key        # Required for live GeminiSummarizer
 ANTHROPIC_API_KEY=your-anthropic-key  # Required for live ClaudeSummarizer
 OPENAI_API_KEY=your-openai-key        # Required for live OpenAISummarizer
+```
+
+## Running the CLI
+
+```bash
+# Run the synthesis pipeline on unsynthesized signals
+DATABASE_URL=... ENCRYPTION_KEY=... GEMINI_API_KEY=... go run ./cmd/signal-flow synthesize
+
+# Run with high effort (reasoning model)
+DATABASE_URL=... ENCRYPTION_KEY=... GEMINI_API_KEY=... go run ./cmd/signal-flow synthesize --effort=high
+
+# Run with Claude
+DATABASE_URL=... ENCRYPTION_KEY=... ANTHROPIC_API_KEY=... go run ./cmd/signal-flow synthesize --provider=claude
 ```
