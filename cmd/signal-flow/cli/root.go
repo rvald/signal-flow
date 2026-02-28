@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"runtime"
 
+	"github.com/rvald/signal-flow/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -51,6 +52,21 @@ func NewRootCmd() *cobra.Command {
 		Long:          "A command-line interface for Signal-Flow" + gettingStarted + accessibilityHelp,
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// Initialize UI explicitly and inject it into the command context
+			u, err := ui.New(ui.Options{
+				Color: "auto",
+			})
+			if err != nil {
+				return err
+			}
+
+			// Replace context inside cobra command with the new ui-injected context
+			ctx := ui.WithUI(cmd.Context(), u)
+			cmd.SetContext(ctx)
+
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return cmd.Help()
 		},
@@ -60,6 +76,7 @@ func NewRootCmd() *cobra.Command {
 	cmd.AddCommand(newVersionCmd())
 	cmd.AddCommand(newBlueskyLoginCmd())
 	cmd.AddCommand(newLoginCmd())
+	cmd.AddCommand(newAuthCmd())
 	cmd.AddCommand(newFeedCmd())
 	cmd.AddCommand(newFollowingCmd())
 	cmd.AddCommand(newHarvestCmd())
