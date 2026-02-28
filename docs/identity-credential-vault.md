@@ -24,6 +24,8 @@ dependencies:
 
 The security domain for Signal-Flow. Manages user identities and securely stores encrypted OAuth2 refresh tokens that enable "Always-On" harvesting from Bluesky and YouTube.
 
+> **Note:** For the CLI Google OAuth flow, see [google-oauth-integration.md](file:///signal-flow/docs/google-oauth-integration.md).
+
 ## Project Structure
 
 ```
