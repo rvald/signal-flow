@@ -101,4 +101,5 @@ Temporary Items
 # Build output directory
 /dist/
 completions
+bin
 signal-flow

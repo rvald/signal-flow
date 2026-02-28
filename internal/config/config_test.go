@@ -1,18 +1,18 @@
-package config_test
+package config
 
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/rvald/signal-flow/internal/config"
 )
 
 func TestSaveAndLoad_RoundTrip(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
-	original := &config.BlueskySession{
+	original := &BlueskySession{
 		AccessJwt:  "access-jwt-123",
 		RefreshJwt: "refresh-jwt-456",
 		Handle:     "spike.bsky.social",
@@ -21,11 +21,11 @@ func TestSaveAndLoad_RoundTrip(t *testing.T) {
 		CreatedAt:  time.Now().Truncate(time.Second),
 	}
 
-	if err := config.SaveSession(original); err != nil {
+	if err := SaveSession(original); err != nil {
 		t.Fatalf("SaveSession: %v", err)
 	}
 
-	loaded, err := config.LoadSession()
+	loaded, err := LoadSession()
 	if err != nil {
 		t.Fatalf("LoadSession: %v", err)
 	}
@@ -50,8 +50,8 @@ func TestSaveAndLoad_RoundTrip(t *testing.T) {
 func TestLoad_NoFile(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
-	_, err := config.LoadSession()
-	if err != config.ErrNoSession {
+	_, err := LoadSession()
+	if err != ErrNoSession {
 		t.Fatalf("expected ErrNoSession, got %v", err)
 	}
 }
@@ -59,7 +59,7 @@ func TestLoad_NoFile(t *testing.T) {
 func TestClear(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
-	session := &config.BlueskySession{
+	session := &BlueskySession{
 		AccessJwt: "to-be-cleared",
 		Handle:    "test.bsky.social",
 		DID:       "did:plc:clear",
@@ -67,16 +67,16 @@ func TestClear(t *testing.T) {
 		CreatedAt: time.Now(),
 	}
 
-	if err := config.SaveSession(session); err != nil {
+	if err := SaveSession(session); err != nil {
 		t.Fatalf("SaveSession: %v", err)
 	}
 
-	if err := config.ClearSession(); err != nil {
+	if err := ClearSession(); err != nil {
 		t.Fatalf("ClearSession: %v", err)
 	}
 
-	_, err := config.LoadSession()
-	if err != config.ErrNoSession {
+	_, err := LoadSession()
+	if err != ErrNoSession {
 		t.Fatalf("expected ErrNoSession after clear, got %v", err)
 	}
 }
@@ -85,7 +85,7 @@ func TestFilePermissions(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", tmpDir)
 
-	session := &config.BlueskySession{
+	session := &BlueskySession{
 		AccessJwt: "perm-test",
 		Handle:    "test.bsky.social",
 		DID:       "did:plc:perm",
@@ -93,7 +93,7 @@ func TestFilePermissions(t *testing.T) {
 		CreatedAt: time.Now(),
 	}
 
-	if err := config.SaveSession(session); err != nil {
+	if err := SaveSession(session); err != nil {
 		t.Fatalf("SaveSession: %v", err)
 	}
 
@@ -118,5 +118,71 @@ func TestFilePermissions(t *testing.T) {
 	dirPerm := dirInfo.Mode().Perm()
 	if dirPerm != 0700 {
 		t.Errorf("dir permissions: got %o, want %o", dirPerm, 0700)
+	}
+}
+
+func TestConfigPath(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "xdg-config"))
+
+	path, err := ConfigPath()
+	if err != nil {
+		t.Fatalf("ConfigPath: %v", err)
+	}
+
+	if filepath.Base(path) != "config.json" {
+		t.Fatalf("unexpected config file: %q", filepath.Base(path))
+	}
+
+	if filepath.Base(filepath.Dir(path)) != AppName {
+		t.Fatalf("unexpected config dir: %q", filepath.Dir(path))
+	}
+}
+
+func TestReadConfig_Missing(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "xdg-config"))
+
+	cfg, err := ReadConfig()
+	if err != nil {
+		t.Fatalf("ReadConfig: %v", err)
+	}
+
+	if cfg.KeyringBackend != "" {
+		t.Fatalf("expected empty config, got %q", cfg.KeyringBackend)
+	}
+}
+
+func TestReadConfig_JSON5(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "xdg-config"))
+
+	path, err := ConfigPath()
+	if err != nil {
+		t.Fatalf("ConfigPath: %v", err)
+	}
+
+	if err = os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	data := `{
+	// allow comments + trailing commas
+	keyring_backend: "file",
+	}`
+
+	if err = os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := ReadConfig()
+	if err != nil {
+		t.Fatalf("ReadConfig: %v", err)
+	}
+
+	if got := strings.TrimSpace(cfg.KeyringBackend); got != "file" {
+		t.Fatalf("expected keyring_backend=file, got %q", got)
 	}
 }

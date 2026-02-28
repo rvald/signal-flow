@@ -11,13 +11,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newLoginCmd() *cobra.Command {
+func newBlueskyLoginCmd() *cobra.Command {
 	var host string
 	var identifier string
 	var password string
 
 	cmd := &cobra.Command{
-		Use:   "login",
+		Use:   "bluesky-login",
 		Short: "Log in to Bluesky using an app password",
 		Long: `Authenticate with Bluesky using your handle and an app password.
 Create an app password at: Settings → App Passwords in the Bluesky app.
