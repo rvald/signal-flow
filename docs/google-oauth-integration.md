@@ -56,6 +56,8 @@ The `auth` command tree has been fully migrated to use the `github.com/spf13/cob
 - **`auth alias`**: Manage account aliases (`list`, `set`, `unset`) to simplify multi-account usage.
 - **`auth service-account`**: Configure headless service account JSON keys.
 - **`auth keyring`**: Interrogates the OS-level secure keyring for stored tokens.
+- **`youtube`**: Commands for interacting with the YouTube API.
+  - **`youtube subscription-list`**: Fetches a user's subscriptions. Supports `--account`, `--maxResults` (default 5, max 50), `--mine`, and `--part` (default 'snippet') flags.
 
 ### Google API Services
 
@@ -86,4 +88,7 @@ When the user runs `auth add` or visits the local server, they are presented wit
 
 # Verify the CLI command tree
 ./bin/signal-flow auth --help
+
+# Query YouTube subscriptions for an account (returns JSON)
+./bin/signal-flow youtube subscription-list --account you.bsky.social --maxResults 10
 ```

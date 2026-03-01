@@ -82,6 +82,7 @@ func NewRootCmd() *cobra.Command {
 	cmd.AddCommand(newHarvestCmd())
 	cmd.AddCommand(newSynthesizeCmd())
 	cmd.AddCommand(newLogoutCmd())
+	cmd.AddCommand(newYoutubeCmd())
 
 	// Replace default help command with custom one that supports -t flag
 
