@@ -5,6 +5,7 @@ import (
 	"runtime"
 
 	"github.com/rvald/signal-flow/internal/ui"
+	"github.com/rvald/signal-flow/internal/outfmt"
 	"github.com/spf13/cobra"
 )
 
@@ -53,6 +54,10 @@ func NewRootCmd() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// Extract our global format flags
+			jsonOutput, _ := cmd.Flags().GetBool("json")
+			plainOutput, _ := cmd.Flags().GetBool("plain")
+
 			// Initialize UI explicitly and inject it into the command context
 			u, err := ui.New(ui.Options{
 				Color: "auto",
@@ -63,6 +68,14 @@ func NewRootCmd() *cobra.Command {
 
 			// Replace context inside cobra command with the new ui-injected context
 			ctx := ui.WithUI(cmd.Context(), u)
+			// Add Output Format (JSON/Plain) to context
+            
+			mode, err := outfmt.FromFlags(jsonOutput, plainOutput)
+			if err != nil {
+				return err // Returns error if user passes both --json AND --plain
+			}
+			ctx = outfmt.WithMode(ctx, mode)
+
 			cmd.SetContext(ctx)
 
 			return nil
@@ -71,6 +84,10 @@ func NewRootCmd() *cobra.Command {
 			return cmd.Help()
 		},
 	}
+
+	// 1. ADD THESE GLOBAL FLAGS!
+	cmd.PersistentFlags().BoolP("json", "j", false, "Output JSON to stdout (best for scripting)")
+	cmd.PersistentFlags().BoolP("plain", "p", false, "Output stable, parseable text to stdout (TSV)")
 
 	// Add subcommands here
 	cmd.AddCommand(newVersionCmd())
