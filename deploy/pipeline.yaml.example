@@ -1,0 +1,27 @@
+# Example pipeline configuration for Signal-Flow.
+# Default location: ~/.config/signal-flow/pipeline.yaml
+#
+# For headless/cloud deployment, set these env vars:
+#   GOG_KEYRING_PASSWORD  — keyring passphrase (skips interactive prompt)
+#   GOG_ACCOUNT           — Google account email (for YouTube source)
+
+sources:
+  - bluesky
+  - youtube
+
+google_account: ""   # Google account email for YouTube, or set GOG_ACCOUNT env var
+
+synthesizer:
+  provider: gemini       # gemini | claude | openai
+  effort: low            # low (flash only) | high (reasoning for distillation)
+  limit: 10              # max signals to synthesize per run
+
+notify:
+  channel: slack
+  webhook_url: ""        # Set via SLACK_WEBHOOK_URL env var or here
+  target: "#daily-digest"
+
+schedule:
+  interval: "4h"         # Documentation only — actual scheduling is external
+
+run_log_path: ~/.config/signal-flow/runs/pipeline.jsonl

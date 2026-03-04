@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"runtime"
 
-	"github.com/rvald/signal-flow/internal/ui"
 	"github.com/rvald/signal-flow/internal/outfmt"
+	"github.com/rvald/signal-flow/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -69,7 +69,7 @@ func NewRootCmd() *cobra.Command {
 			// Replace context inside cobra command with the new ui-injected context
 			ctx := ui.WithUI(cmd.Context(), u)
 			// Add Output Format (JSON/Plain) to context
-            
+
 			mode, err := outfmt.FromFlags(jsonOutput, plainOutput)
 			if err != nil {
 				return err // Returns error if user passes both --json AND --plain
@@ -100,6 +100,7 @@ func NewRootCmd() *cobra.Command {
 	cmd.AddCommand(newSynthesizeCmd())
 	cmd.AddCommand(newLogoutCmd())
 	cmd.AddCommand(newYoutubeCmd())
+	cmd.AddCommand(newPipelineCmd())
 
 	// Replace default help command with custom one that supports -t flag
 

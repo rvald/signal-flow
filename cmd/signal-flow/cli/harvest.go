@@ -42,6 +42,19 @@ from accounts you follow.`,
 }
 
 func runHarvest(ctx context.Context, limit int64, dryRun, followsOnly bool) error {
+	// --- Fail-fast: check required env vars before API calls (unless dry-run) ---
+	if !dryRun {
+		databaseURL := os.Getenv("DATABASE_URL")
+		if databaseURL == "" {
+			return fmt.Errorf("DATABASE_URL env var is required for harvest (set it or use --dry-run)")
+		}
+
+		encryptionKeyHex := os.Getenv("ENCRYPTION_KEY")
+		if encryptionKeyHex == "" {
+			return fmt.Errorf("ENCRYPTION_KEY env var is required for harvest (set it or use --dry-run)")
+		}
+	}
+
 	// --- Auth (from config file) ---
 	client, session, err := resolveBlueskyClient(ctx)
 	if err != nil {
@@ -85,16 +98,9 @@ func runHarvest(ctx context.Context, limit int64, dryRun, followsOnly bool) erro
 		return nil
 	}
 
-	// --- Connect to DB ---
+	// --- Connect to DB (env vars already validated above) ---
 	databaseURL := os.Getenv("DATABASE_URL")
-	if databaseURL == "" {
-		return fmt.Errorf("DATABASE_URL env var is required for harvest (set it or use --dry-run)")
-	}
-
 	encryptionKeyHex := os.Getenv("ENCRYPTION_KEY")
-	if encryptionKeyHex == "" {
-		return fmt.Errorf("ENCRYPTION_KEY env var is required for harvest (set it or use --dry-run)")
-	}
 
 	encryptionKey, err := hex.DecodeString(encryptionKeyHex)
 	if err != nil {

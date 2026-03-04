@@ -26,7 +26,7 @@ func isExpiredTokenErr(err error) bool {
 // it with a user-friendly message instructing them to re-authenticate.
 func wrapExpiredTokenErr(err error) error {
 	if isExpiredTokenErr(err) {
-		return fmt.Errorf("session expired — please log in again:\n\n  signal-flow login --identifier <your-handle> --password <your-app-password>\n\nOriginal error: %w", err)
+		return fmt.Errorf("session expired — please log in again:\n\n  signal-flow bluesky-login --identifier <your-handle> --password <your-app-password>\n\nOriginal error: %w", err)
 	}
 	return err
 }

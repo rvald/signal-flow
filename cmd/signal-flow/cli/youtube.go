@@ -15,14 +15,14 @@ import (
 var newYoutubeService = googleapi.NewYoutube
 
 func newYoutubeCmd() *cobra.Command {
-	
+
 	cmd := &cobra.Command{
 		Use:   "youtube",
 		Short: "Youtube api related commands",
 	}
 
-	
 	cmd.PersistentFlags().StringP("account", "a", "", "The Google account email to use")
+	_ = cmd.MarkPersistentFlagRequired("account")
 
 	cmd.AddCommand(newSubscriptionListCmd())
 	cmd.AddCommand(newActivitiesListCmd())
@@ -113,7 +113,7 @@ func (c *YoutubeSubscriptionsListCmd) Run(ctx context.Context, flags *RootFlags)
 	defer flush()
 	// Print headers
 	fmt.Fprintln(w, "ID\tTITLE\tCHANNEL_ID")
-	
+
 	// Print rows
 	for _, item := range response.Items {
 		fmt.Fprintf(w, "%s\t%s\t%s\n", item.Id, item.Snippet.Title, item.Snippet.ResourceId.ChannelId)
@@ -122,10 +122,9 @@ func (c *YoutubeSubscriptionsListCmd) Run(ctx context.Context, flags *RootFlags)
 	return nil
 }
 
-
 type YoutubeActivitiesListCmd struct {
-	Part []string
-	ChannedId string
+	Part       []string
+	ChannedId  string
 	MaxResults int
 }
 
@@ -134,8 +133,8 @@ func newActivitiesListCmd() *cobra.Command {
 	var maxResults int
 	var channelId string
 
-	cmd := &cobra.Command {
-		Use: "activities-list",
+	cmd := &cobra.Command{
+		Use:   "activities-list",
 		Short: "Returns a list of channel activity events that match the request criteria.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			accountEmail, err := cmd.Flags().GetString("account")
@@ -143,18 +142,17 @@ func newActivitiesListCmd() *cobra.Command {
 				return err
 			}
 			activitiesCmd := &YoutubeActivitiesListCmd{
-				Part: part,
+				Part:       part,
 				MaxResults: maxResults,
-				ChannedId: channelId,
+				ChannedId:  channelId,
 			}
 
-			flags := &RootFlags {
+			flags := &RootFlags{
 				Account: accountEmail,
 			}
 
 			return activitiesCmd.Run(cmd.Context(), flags)
 		},
-
 	}
 
 	cmd.Flags().StringVar(&channelId, "channelId", "", "The channelId parameter specifies a unique YouTube channel ID. The API will then return a list of that channel's activities.")
@@ -206,11 +204,11 @@ func (c *YoutubeActivitiesListCmd) Run(ctx context.Context, flags *RootFlags) er
 	defer flush()
 	// Print headers
 	fmt.Fprintln(w, "ID\tTITLE\tCHANNEL_ID\tDESCRIPTION\tTYPE")
-	
+
 	// Print rows
 	for _, item := range response.Items {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", item.Id, item.Snippet.Title, item.Snippet.ChannelId, item.Snippet.Description, item.Snippet.Type)
 	}
 
-	return  nil
+	return nil
 }

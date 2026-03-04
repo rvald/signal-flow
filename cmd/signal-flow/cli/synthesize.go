@@ -48,6 +48,14 @@ Effort tiers:
 
 func runSynthesize(ctx context.Context, providerName, effort string, limit int, targetURL string) error {
 	// --- Defensive checks ---
+	providerName = strings.ToLower(providerName)
+	switch providerName {
+	case "gemini", "claude", "openai":
+		// valid
+	default:
+		return fmt.Errorf("invalid provider '%s': must be gemini, claude, or openai", providerName)
+	}
+
 	if effort != "low" && effort != "high" {
 		return fmt.Errorf("invalid effort '%s': must be 'low' or 'high'", effort)
 	}

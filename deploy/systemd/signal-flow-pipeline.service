@@ -1,0 +1,12 @@
+[Unit]
+Description=Signal-Flow pipeline run
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/signal-flow pipeline run
+# Env file must include: DATABASE_URL, ENCRYPTION_KEY, GEMINI_API_KEY,
+# SLACK_WEBHOOK_URL, GOG_KEYRING_PASSWORD (keyring passphrase for headless),
+# and GOG_ACCOUNT (Google account email for YouTube).
+EnvironmentFile=%h/.config/signal-flow/env
+StandardOutput=append:%h/.config/signal-flow/logs/pipeline.log
+StandardError=append:%h/.config/signal-flow/logs/pipeline.log

@@ -1,0 +1,83 @@
+# =============================================================================
+# Signal-Flow Pipeline — Kubernetes CronJob
+# =============================================================================
+# Runs the pipeline every 4 hours.
+#
+# Prerequisites:
+#   1. Build and push the Docker image:
+#      docker build -t ghcr.io/rvald/signal-flow:latest .
+#      docker push ghcr.io/rvald/signal-flow:latest
+#
+#   2. Create the secret:
+#      kubectl create secret generic signal-flow-secrets \
+#        --from-literal=DATABASE_URL='postgres://...' \
+#        --from-literal=ENCRYPTION_KEY='...' \
+#        --from-literal=GEMINI_API_KEY='...' \
+#        --from-literal=SLACK_WEBHOOK_URL='https://hooks.slack.com/...' \
+#        --from-literal=GOG_KEYRING_PASSWORD='...' \
+#        --from-literal=GOG_ACCOUNT='you@gmail.com'
+#
+#   3. Create the keyring secret (run auth locally first, then export):
+#      kubectl create secret generic signal-flow-keyring \
+#        --from-file=keyring=~/.config/signal-flow/keyring/
+#
+#   4. Create the config map:
+#      kubectl create configmap signal-flow-pipeline-config \
+#        --from-file=pipeline.yaml=deploy/k8s/pipeline.yaml
+#
+#   5. Apply:
+#      kubectl apply -f deploy/k8s/cronjob.yaml
+# =============================================================================
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: signal-flow-pipeline
+  labels:
+    app: signal-flow
+    component: pipeline
+spec:
+  schedule: "0 */4 * * *"  # Every 4 hours
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 5
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 600  # 10 minute timeout
+      template:
+        metadata:
+          labels:
+            app: signal-flow
+            component: pipeline
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: pipeline
+              image: ghcr.io/rvald/signal-flow:latest
+              command: ["signal-flow", "pipeline", "run"]
+              args: ["--config", "/config/pipeline.yaml"]
+              envFrom:
+                - secretRef:
+                    name: signal-flow-secrets
+              volumeMounts:
+                - name: config
+                  mountPath: /config
+                  readOnly: true
+                - name: keyring
+                  mountPath: /root/.config/signal-flow/keyring
+                  readOnly: true
+              resources:
+                requests:
+                  memory: "128Mi"
+                  cpu: "100m"
+                limits:
+                  memory: "512Mi"
+                  cpu: "500m"
+          volumes:
+            - name: config
+              configMap:
+                name: signal-flow-pipeline-config
+            - name: keyring
+              secret:
+                secretName: signal-flow-keyring

@@ -29,6 +29,11 @@ type KeyringStore struct {
 	ring keyring.Keyring
 }
 
+// NewKeyringStore wraps an already-opened keyring.Keyring as a Store.
+func NewKeyringStore(ring keyring.Keyring) Store {
+	return &KeyringStore{ring: ring}
+}
+
 type Token struct {
 	Client       string    `json:"client,omitempty"`
 	Email        string    `json:"email"`

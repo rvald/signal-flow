@@ -29,6 +29,7 @@ signal-flow/
 ├── cmd/signal-flow/cli/
 │   ├── auth.go                                          # Root auth Cobra command (`auth add`, `auth list`, etc.)
 │   ├── auth_alias.go                                    # `auth alias` subcommands
+│   ├── auth_export.go                                   # `auth export` — portable keyring for headless deployment
 │   ├── auth_keyring.go                                  # `auth keyring` subcommands
 │   └── auth_service_account.go                          # `auth service-account` subcommands
 └── internal/
@@ -56,8 +57,10 @@ The `auth` command tree has been fully migrated to use the `github.com/spf13/cob
 - **`auth alias`**: Manage account aliases (`list`, `set`, `unset`) to simplify multi-account usage.
 - **`auth service-account`**: Configure headless service account JSON keys.
 - **`auth keyring`**: Interrogates the OS-level secure keyring for stored tokens.
-- **`youtube`**: Commands for interacting with the YouTube API.
+- **`auth export`**: Exports a token from the active keyring (e.g. GNOME Keyring) to the encrypted file backend for headless/cloud deployment. Prompts for an export passphrase (or uses `GOG_KEYRING_PASSWORD` env var). Flags: `--account` (required), `--output` (optional custom dir).
+- **`youtube`**: Commands for interacting with the YouTube API. The `--account` flag is **required** on all subcommands.
   - **`youtube subscription-list`**: Fetches a user's subscriptions. Supports `--account`, `--maxResults` (default 5, max 50), `--mine`, and `--part` (default 'snippet') flags.
+  - **`youtube activities-list`**: Returns a list of channel activity events that match the request criteria. Supports `--account`, `--channelId`, `--maxResults` (default 5, max 50), and `--part` (default 'snippet,contentDetails') flags.
 
 ### Google API Services
 
@@ -91,4 +94,11 @@ When the user runs `auth add` or visits the local server, they are presented wit
 
 # Query YouTube subscriptions for an account (returns JSON)
 ./bin/signal-flow youtube subscription-list --account you.bsky.social --maxResults 10
+
+# Query YouTube activities for a specific channel
+./bin/signal-flow youtube activities-list --account you@gmail.com --channelId UC_x5XG1OV2P6uZZ5FSM9Ttw --maxResults 5
+
+# Export tokens for headless/cloud deployment
+./bin/signal-flow auth export --account you@gmail.com
+# Then set GOG_KEYRING_BACKEND=file and GOG_KEYRING_PASSWORD=<passphrase>
 ```
