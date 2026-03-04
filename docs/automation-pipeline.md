@@ -85,7 +85,8 @@ signal-flow/
 - **Pipeline** — [internal/pipeline/pipeline.go](file:///signal-flow/internal/pipeline/pipeline.go)
   - `HarvestFunc` / `SynthesizeFunc` — dependency-injected phase functions
   - `Run(ctx) (*PipelineRun, error)` — harvest all sources → synthesize → notify → log
-  - Status: `"ok"` | `"partial"` (some phase failed) | `"error"` (all failed)
+  - `FailFast` — when `true`, stops pipeline on the first harvest error (default in CLI)
+  - Status: `"ok"` | `"partial"` (some phase failed) | `"error"` (all failed or fail-fast triggered)
 
 - **PipelineRun** — [internal/pipeline/runlog.go](file:///signal-flow/internal/pipeline/runlog.go)
   - `WriteRunLog(path, *PipelineRun)` — append JSONL line
@@ -127,7 +128,8 @@ signal-flow/
 
 - **Pipeline tests** — [internal/pipeline/pipeline_test.go](file:///signal-flow/internal/pipeline/pipeline_test.go)
   - `Test_Pipeline_FullRun` — all phases, run log written
-  - `Test_Pipeline_HarvestError_ContinuesOtherSources` — partial failure
+  - `Test_Pipeline_HarvestError_ContinuesWhenNotFailFast` — partial failure continues
+  - `Test_Pipeline_HarvestError_StopsWhenFailFast` — fail-fast stops pipeline, no synthesis/notify
   - `Test_Pipeline_NoSignals_SkipsSynthesizeAndNotify` — no wasted LLM calls
   - `Test_Pipeline_NotifyError_StillLogsRun` — run log always written
   - `Test_Pipeline_RunLog_JSONL` — valid JSON per line
@@ -142,6 +144,7 @@ signal-flow/
 - **Separate scheduler from work** — `signal-flow pipeline run` is stateless and exits. The scheduler (systemd timer, K8s CronJob) is external. Same binary, different entrypoints.
 - **YAML config with env overrides** — Config file for complex settings, env vars for secrets. `SLACK_WEBHOOK_URL` env var always wins over the file value.
 - **Pre-flight validation** — All required env vars and source-specific config (e.g. `google_account` for YouTube) are validated before any API calls, preventing wasted quota on partial runs.
+- **Fail-fast harvest** — `FailFast: true` (CLI default) stops the pipeline on the first harvest error. Prevents wasting LLM quota when auth is broken on one source. The graceful `partial` mode (`FailFast: false`) is preserved for future use cases where best-effort collection is preferred.
 - **Headless auth via `auth export`** — Tokens stored in GNOME Keyring (desktop) can be exported to the encrypted file backend via `signal-flow auth export`, then unlocked headlessly with `GOG_KEYRING_PASSWORD` env var.
 - **`Persistent=true` on systemd timer** — Catches up missed runs if the machine was off. `RandomizedDelaySec=300` adds jitter.
 - **Multi-stage Docker build** — `golang:1.25-alpine` builder → `alpine:3.21` runtime. CGO disabled, statically linked. Final image ~15MB.

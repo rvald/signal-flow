@@ -109,11 +109,11 @@ func Test_Pipeline_FullRun(t *testing.T) {
 }
 
 // =============================================================================
-// Test_Pipeline_HarvestError_ContinuesOtherSources
-// Verifies that if one source fails, others are still processed.
+// Test_Pipeline_HarvestError_ContinuesWhenNotFailFast
+// Verifies that if one source fails and FailFast is false, others still run.
 // =============================================================================
 
-func Test_Pipeline_HarvestError_ContinuesOtherSources(t *testing.T) {
+func Test_Pipeline_HarvestError_ContinuesWhenNotFailFast(t *testing.T) {
 	logPath := filepath.Join(t.TempDir(), "runs.jsonl")
 	notif := &mockNotifier{}
 
@@ -132,6 +132,7 @@ func Test_Pipeline_HarvestError_ContinuesOtherSources(t *testing.T) {
 		},
 		Notifier:   notif,
 		RunLogPath: logPath,
+		FailFast:   false,
 	}
 
 	run, err := p.Run(context.Background())
@@ -147,6 +148,77 @@ func Test_Pipeline_HarvestError_ContinuesOtherSources(t *testing.T) {
 	}
 	if !notif.called {
 		t.Error("notifier should still be called for youtube signals")
+	}
+}
+
+// =============================================================================
+// Test_Pipeline_HarvestError_StopsWhenFailFast
+// Verifies that with FailFast=true, the pipeline stops on the first harvest
+// error without running synthesis or notification.
+// =============================================================================
+
+func Test_Pipeline_HarvestError_StopsWhenFailFast(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "runs.jsonl")
+	synthesizeCalled := false
+	notif := &mockNotifier{}
+	youtubeHarvested := false
+
+	p := &pipeline.Pipeline{
+		Sources: []string{"bluesky", "youtube"},
+		Harvest: func(_ context.Context, source string) ([]domain.RawSignal, error) {
+			if source == "bluesky" {
+				return nil, errors.New("session expired")
+			}
+			youtubeHarvested = true
+			return []domain.RawSignal{
+				{SourceURL: "https://youtube.com/v1", Title: "YT Video", Provider: "youtube"},
+			}, nil
+		},
+		Synthesize: func(_ context.Context) (int, error) {
+			synthesizeCalled = true
+			return 1, nil
+		},
+		Notifier:   notif,
+		RunLogPath: logPath,
+		FailFast:   true,
+	}
+
+	run, err := p.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	// Pipeline should stop immediately with error status.
+	if run.Status != "error" {
+		t.Errorf("Status = %q, want error", run.Status)
+	}
+	if run.Error == "" {
+		t.Error("Error should contain the harvest failure message")
+	}
+
+	// YouTube should NOT have been harvested (bluesky is first and failed).
+	if youtubeHarvested {
+		t.Error("youtube harvest should not run after bluesky fails with FailFast")
+	}
+
+	// Synthesize and notify should NOT be called.
+	if synthesizeCalled {
+		t.Error("synthesize should not be called when FailFast stops the pipeline")
+	}
+	if notif.called {
+		t.Error("notifier should not be called when FailFast stops the pipeline")
+	}
+
+	// Run log should still be written.
+	runs, err := pipeline.ReadRunLog(logPath)
+	if err != nil {
+		t.Fatalf("ReadRunLog: %v", err)
+	}
+	if len(runs) != 1 {
+		t.Fatalf("expected 1 run log entry, got %d", len(runs))
+	}
+	if runs[0].Status != "error" {
+		t.Errorf("logged status = %q, want error", runs[0].Status)
 	}
 }
 

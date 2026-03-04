@@ -25,6 +25,7 @@ type Pipeline struct {
 	SignalRepo domain.SignalRepository
 	Sources    []string
 	RunLogPath string
+	FailFast   bool // Stop pipeline on the first harvest error instead of continuing.
 	Logger     *slog.Logger
 }
 
@@ -49,6 +50,14 @@ func (p *Pipeline) Run(ctx context.Context) (*PipelineRun, error) {
 		if err != nil {
 			logger.Error("harvest failed", "source", source, "error", err)
 			harvestErrors = append(harvestErrors, fmt.Sprintf("%s: %v", source, err))
+			if p.FailFast {
+				run.Status = "error"
+				run.Error = fmt.Sprintf("harvest failed: %v", harvestErrors)
+				run.FinishedAt = time.Now()
+				run.DurationMs = run.FinishedAt.Sub(run.StartedAt).Milliseconds()
+				p.writeLog(run)
+				return run, nil
+			}
 			continue
 		}
 		totalSignals += len(signals)

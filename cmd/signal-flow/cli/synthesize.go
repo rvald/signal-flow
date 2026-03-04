@@ -91,11 +91,11 @@ func runSynthesize(ctx context.Context, providerName, effort string, limit int, 
 		if apiKey == "" {
 			return fmt.Errorf("GEMINI_API_KEY env var is required for the gemini provider")
 		}
-		flashModel = "gemini-2.5-flash"
-		reasoningModel = "gemini-3-flash"
+		flashModel = "gemma-3-4b"
+		reasoningModel = "gemma-3-27b"
 		f, err := intelligence.NewGeminiSummarizer(ctx, apiKey, flashModel)
 		if err != nil {
-			return fmt.Errorf("init gemini flash: %w", err)
+			return fmt.Errorf("init gemini: %w", err)
 		}
 		flash = f
 		if effort == "high" {
