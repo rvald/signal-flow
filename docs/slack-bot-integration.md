@@ -31,8 +31,8 @@ Slack (Socket Mode)
 ```
 internal/
   app/           ← Service bootstrap (DB, repos, synthesizer, notifier)     ✅
-  agent/         ← Conversational LLM agent with tool dispatch              ⬜
-    tools/       ← Typed tool definitions (harvest, synthesize, query)      ⬜
+  agent/         ← Conversational LLM agent with tool dispatch              ✅
+    tools/       ← Typed tool definitions (harvest, query, status)           ✅
   slackbot/      ← Slack Socket Mode event handler + Block Kit formatter    ⬜
 
 cmd/signal-flow/cli/
@@ -54,23 +54,24 @@ Extracted service assembly from `cli/pipeline.go` into a reusable package so bot
 | `cli/pipeline.go` | ✅ Refactored | Uses `app.BuildSummarizers()`, −45 lines |
 | `main.go` | ✅ Cleaned | Deleted 125 lines of commented-out HTTP server code |
 
-### Phase 2: Agent Tool Registry (`internal/agent/tools`) ⬜
+### Phase 2: Agent Tool Registry (`internal/agent/tools`) ✅
 
 Typed tool definitions the LLM can invoke. Each tool wraps an `App` service operation.
 
-- `Tool` struct: name, description, parameters, execute function
-- `Registry`: register, get, list, generate LLM schema
-- Tools: `harvest` (Bluesky/YouTube), `synthesize`, `query_signals`, `pipeline_status`
+| File | Status | Notes |
+|------|--------|-------|
+| `tools.go` | ✅ Done | `Tool`, `Param`, `Result`, `Registry` types with 8 tests |
+| `harvest_tool.go` | ✅ Done | `harvest` tool (wraps harvest fn), `query_signals` tool (wraps repo), 4 tests |
+| `status_tool.go` | ✅ Done | `pipeline_status` tool (wraps ReadRunLog) |
 
-### Phase 3: Conversational Agent Core (`internal/agent`) ⬜
+### Phase 3: Conversational Agent Core (`internal/agent`) ✅
 
-LLM-powered agent that interprets messages and dispatches tool calls.
+LLM-powered agent with tool dispatch, session management, and context windowing.
 
-- `Agent` struct with `LLMClient` interface, tool registry, system prompt
-- `Session` / `SessionStore` — per-user conversation context with sliding window
-- Token budget management (hard cap per turn)
-- Gemini function-calling integration
-- Graceful degradation on LLM errors
+| File | Status | Notes |
+|------|--------|-------|
+| `agent.go` | ✅ Done | `Agent`, `LLMClient` interface, `Handle()` loop with tool dispatch, 4 tests |
+| `session.go` | ✅ Done | `Session` with sliding window, `SessionStore` (thread-safe), 5 tests |
 
 ### Phase 4: Slack Bot Event Handler (`internal/slackbot`) ⬜
 
