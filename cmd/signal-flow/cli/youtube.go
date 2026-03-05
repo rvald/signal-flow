@@ -18,7 +18,7 @@ func newYoutubeCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "youtube",
-		Short: "Youtube api related commands",
+		Short: "YouTube API related commands",
 	}
 
 	cmd.PersistentFlags().StringP("account", "a", "", "The Google account email to use")
@@ -44,6 +44,8 @@ func newSubscriptionListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "subscription-list",
 		Short: "Fetch the user's subscriptions",
+		Example: `  # List your YouTube subscriptions
+  signal-flow youtube subscription-list --account user@gmail.com`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			accountEmail, err := cmd.Flags().GetString("account")
 			if err != nil {
@@ -63,9 +65,9 @@ func newSubscriptionListCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().BoolVar(&mine, "mine", true, "Set this parameter's value to true to retrieve a feed of the authenticated user's subscriptions.")
-	cmd.Flags().IntVar(&maxResults, "maxResults", 5, "The maxResults parameter specifies the maximum number of items that should be returned in the result set. Acceptable values are 0 to 50, inclusive. The default value is 5.")
-	cmd.Flags().StringArrayVar(&part, "part", []string{"snippet"}, "The part parameter specifies a comma-separated list of one or more subscription resource properties that the API response will include.")
+	cmd.Flags().BoolVar(&mine, "mine", true, "fetch subscriptions for the authenticated user")
+	cmd.Flags().IntVar(&maxResults, "max-results", 5, "maximum number of results (0-50)")
+	cmd.Flags().StringArrayVar(&part, "part", []string{"snippet"}, "resource properties to include in the response")
 
 	return cmd
 }
@@ -76,7 +78,7 @@ func (c *YoutubeSubscriptionsListCmd) Run(ctx context.Context, flags *RootFlags)
 	u := ui.FromContext(ctx)
 
 	if c.MaxResults > 50 {
-		return usage("max search results is 50")
+		return usage("max results is 50")
 	}
 
 	account, err := requireAccount(flags)
@@ -124,7 +126,7 @@ func (c *YoutubeSubscriptionsListCmd) Run(ctx context.Context, flags *RootFlags)
 
 type YoutubeActivitiesListCmd struct {
 	Part       []string
-	ChannedId  string
+	ChannelId  string
 	MaxResults int
 }
 
@@ -135,7 +137,9 @@ func newActivitiesListCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "activities-list",
-		Short: "Returns a list of channel activity events that match the request criteria.",
+		Short: "List activity events for a YouTube channel",
+		Example: `  # List activities for a specific channel
+  signal-flow youtube activities-list --account user@gmail.com --channel-id UC123abc`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			accountEmail, err := cmd.Flags().GetString("account")
 			if err != nil {
@@ -144,7 +148,7 @@ func newActivitiesListCmd() *cobra.Command {
 			activitiesCmd := &YoutubeActivitiesListCmd{
 				Part:       part,
 				MaxResults: maxResults,
-				ChannedId:  channelId,
+				ChannelId:  channelId,
 			}
 
 			flags := &RootFlags{
@@ -155,9 +159,9 @@ func newActivitiesListCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&channelId, "channelId", "", "The channelId parameter specifies a unique YouTube channel ID. The API will then return a list of that channel's activities.")
-	cmd.Flags().IntVar(&maxResults, "maxResults", 5, "The maxResults parameter specifies the maximum number of items that should be returned in the result set. Acceptable values are 0 to 50, inclusive. The default value is 5.")
-	cmd.Flags().StringArrayVar(&part, "part", []string{"snippet,contentDetails"}, "The part parameter specifies a comma-separated list of one or more subscription resource properties that the API response will include.")
+	cmd.Flags().StringVar(&channelId, "channel-id", "", "YouTube channel ID to fetch activities for")
+	cmd.Flags().IntVar(&maxResults, "max-results", 5, "maximum number of results (0-50)")
+	cmd.Flags().StringArrayVar(&part, "part", []string{"snippet,contentDetails"}, "resource properties to include in the response")
 
 	return cmd
 
@@ -168,7 +172,7 @@ func (c *YoutubeActivitiesListCmd) Run(ctx context.Context, flags *RootFlags) er
 	u := ui.FromContext(ctx)
 
 	if c.MaxResults > 50 {
-		return usage("max search results is 50")
+		return usage("max results is 50")
 	}
 
 	account, err := requireAccount(flags)
@@ -182,7 +186,7 @@ func (c *YoutubeActivitiesListCmd) Run(ctx context.Context, flags *RootFlags) er
 	}
 
 	call := svc.Activities.List(c.Part)
-	call = call.ChannelId(c.ChannedId)
+	call = call.ChannelId(c.ChannelId)
 	response, err := call.Do()
 	if err != nil {
 		return err

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"runtime"
 
 	"github.com/rvald/signal-flow/internal/outfmt"
@@ -50,17 +51,18 @@ func NewRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "signal-flow",
 		Short:         "Signal-Flow CLI",
-		Long:          "A command-line interface for Signal-Flow" + gettingStarted + accessibilityHelp,
+		Long:          "A command-line interface for Signal-Flow\n" + gettingStarted + accessibilityHelp + "\nReport issues: https://github.com/rvald/signal-flow/issues\n",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			// Extract our global format flags
+			// Extract our global format + color flags
 			jsonOutput, _ := cmd.Flags().GetBool("json")
 			plainOutput, _ := cmd.Flags().GetBool("plain")
+			colorMode, _ := cmd.Flags().GetString("color")
 
 			// Initialize UI explicitly and inject it into the command context
 			u, err := ui.New(ui.Options{
-				Color: "auto",
+				Color: colorMode,
 			})
 			if err != nil {
 				return err
@@ -88,6 +90,7 @@ func NewRootCmd() *cobra.Command {
 	// 1. ADD THESE GLOBAL FLAGS!
 	cmd.PersistentFlags().BoolP("json", "j", false, "Output JSON to stdout (best for scripting)")
 	cmd.PersistentFlags().BoolP("plain", "p", false, "Output stable, parseable text to stdout (TSV)")
+	cmd.PersistentFlags().String("color", "auto", "Color output: auto|always|never")
 
 	// Add subcommands here
 	cmd.AddCommand(newVersionCmd())
@@ -111,10 +114,20 @@ func newVersionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
 		Short: "Show version information",
-		Run: func(_ *cobra.Command, _ []string) {
-			fmt.Printf("Entire CLI %s (%s)\n", Version, Commit)
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if outfmt.IsJSON(cmd.Context()) {
+				return outfmt.WriteJSON(cmd.Context(), os.Stdout, map[string]any{
+					"version":    Version,
+					"commit":     Commit,
+					"go_version": runtime.Version(),
+					"os":         runtime.GOOS,
+					"arch":       runtime.GOARCH,
+				})
+			}
+			fmt.Printf("signal-flow %s (%s)\n", Version, Commit)
 			fmt.Printf("Go version: %s\n", runtime.Version())
 			fmt.Printf("OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+			return nil
 		},
 	}
 }

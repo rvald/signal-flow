@@ -2,19 +2,16 @@ package cli
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/openai/openai-go/v3/shared"
 	"github.com/rvald/signal-flow/internal/domain"
 	"github.com/rvald/signal-flow/internal/intelligence"
-	"github.com/rvald/signal-flow/internal/repository"
-	"github.com/rvald/signal-flow/internal/security"
+	"github.com/rvald/signal-flow/internal/outfmt"
 	"github.com/spf13/cobra"
 )
 
@@ -33,6 +30,14 @@ Requires DATABASE_URL, ENCRYPTION_KEY, and the API key for your chosen provider.
 Effort tiers:
   low  - single-pass processing using a fast model (flash)
   high - two-pass processing: fast model for analysis, reasoning model for distillation.`,
+		Example: `  # Synthesize up to 10 signals with Gemini (default)
+  signal-flow synthesize
+
+  # Use Claude with high effort
+  signal-flow synthesize --provider claude --effort high
+
+  # Re-synthesize a specific URL
+  signal-flow synthesize --url https://example.com/article`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runSynthesize(cmd.Context(), provider, effort, limit, url)
 		},
@@ -40,7 +45,7 @@ Effort tiers:
 
 	cmd.Flags().StringVar(&provider, "provider", "gemini", "LLM provider (gemini, claude, openai)")
 	cmd.Flags().StringVar(&effort, "effort", "low", "synthesizer effort level: low (flash), high (reasoning)")
-	cmd.Flags().IntVar(&limit, "limit", 10, "maximum number of signals to process")
+	cmd.Flags().IntVarP(&limit, "limit", "l", 10, "maximum number of signals to process")
 	cmd.Flags().StringVar(&url, "url", "", "synthesize a specific signal by URL")
 
 	return cmd
@@ -58,26 +63,6 @@ func runSynthesize(ctx context.Context, providerName, effort string, limit int, 
 
 	if effort != "low" && effort != "high" {
 		return fmt.Errorf("invalid effort '%s': must be 'low' or 'high'", effort)
-	}
-
-	databaseURL := os.Getenv("DATABASE_URL")
-	if databaseURL == "" {
-		return fmt.Errorf("DATABASE_URL env var is required")
-	}
-
-	encryptionKeyHex := os.Getenv("ENCRYPTION_KEY")
-	if encryptionKeyHex == "" {
-		return fmt.Errorf("ENCRYPTION_KEY env var is required")
-	}
-
-	encryptionKey, err := hex.DecodeString(encryptionKeyHex)
-	if err != nil {
-		return fmt.Errorf("ENCRYPTION_KEY must be valid hex: %w", err)
-	}
-
-	_, err = security.NewLocalKeyManager(encryptionKey)
-	if err != nil {
-		return fmt.Errorf("create key manager: %w", err)
 	}
 
 	// --- Initialize Provider ---
@@ -138,30 +123,23 @@ func runSynthesize(ctx context.Context, providerName, effort string, limit int, 
 	}
 
 	// Print configuration
-	fmt.Printf("Provider: %s\n", providerName)
-	fmt.Printf("  Analysis:     %s (always)\n", flashModel)
+	fmt.Fprintf(os.Stderr, "Provider: %s\n", providerName)
+	fmt.Fprintf(os.Stderr, "  Analysis:     %s (always)\n", flashModel)
 	if effort == "high" {
-		fmt.Printf("  Distillation: %s (high effort)\n\n", reasoningModel)
+		fmt.Fprintf(os.Stderr, "  Distillation: %s (high effort)\n\n", reasoningModel)
 	} else {
-		fmt.Printf("  Distillation: %s (low effort)\n\n", flashModel)
+		fmt.Fprintf(os.Stderr, "  Distillation: %s (low effort)\n\n", flashModel)
 	}
 
 	// --- Connect to DB ---
-	dbCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
-	pool, err := pgxpool.New(dbCtx, databaseURL)
+	db, cleanup, err := connectDB(ctx)
 	if err != nil {
-		return fmt.Errorf("connect to database: %w", err)
+		return err
 	}
-	defer pool.Close()
+	defer cleanup()
 
-	if err := pool.Ping(dbCtx); err != nil {
-		return fmt.Errorf("ping database: %w", err)
-	}
-
-	signalRepo := repository.NewPostgresSignalRepository(pool)
-	tenantID := devTenantID
+	signalRepo := db.Repo
+	tenantID := db.TenantID
 
 	// --- Fetch Signals ---
 	var signals []*domain.Signal
@@ -175,17 +153,17 @@ func runSynthesize(ctx context.Context, providerName, effort string, limit int, 
 			return fmt.Errorf("signal not found in database for URL: %s (run harvest first)", targetURL)
 		}
 		signals = []*domain.Signal{sig}
-		fmt.Printf("Processing 1 explicit signal...\n")
+		fmt.Fprintf(os.Stderr, "Processing 1 explicit signal...\n")
 	} else {
 		signals, err = signalRepo.FindUnsynthesized(ctx, tenantID, limit)
 		if err != nil {
 			return fmt.Errorf("find unsynthesized signals: %w", err)
 		}
 		if len(signals) == 0 {
-			fmt.Println("No unsynthesized signals found.")
+			fmt.Fprintln(os.Stderr, "No unsynthesized signals found.")
 			return nil
 		}
-		fmt.Printf("Processing %d unsynthesized signals...\n", len(signals))
+		fmt.Fprintf(os.Stderr, "Processing %d unsynthesized signals...\n", len(signals))
 	}
 
 	// --- Synthesize ---
@@ -200,19 +178,19 @@ func runSynthesize(ctx context.Context, providerName, effort string, limit int, 
 	cachedCount := 0
 
 	for i, sig := range signals {
-		fmt.Printf("  %d. %s  → ", i+1, sig.SourceURL)
+		fmt.Fprintf(os.Stderr, "  %d. %s  → ", i+1, sig.SourceURL)
 
 		result, err := synthesizer.Synthesize(ctx, tenantID, sig.SourceURL, sig.Content, domain.ContextParams{
 			Priority: priority,
 		})
 
 		if err != nil {
-			fmt.Printf("✗ failed (%v)\n", err)
+			fmt.Fprintf(os.Stderr, "✗ failed (%v)\n", err)
 			continue
 		}
 
 		if result.Cached {
-			fmt.Println("✓ cached (already synthesized)")
+			fmt.Fprintln(os.Stderr, "✓ cached (already synthesized)")
 			cachedCount++
 			continue
 		}
@@ -225,10 +203,19 @@ func runSynthesize(ctx context.Context, providerName, effort string, limit int, 
 			totalTokens += u.PromptTokens + u.CompletionTokens
 		}
 
-		fmt.Printf("✓ synthesized (%d tokens, %.1fs)\n", sigTokens, sigLatency.Seconds())
+		fmt.Fprintf(os.Stderr, "✓ synthesized (%d tokens, %.1fs)\n", sigTokens, sigLatency.Seconds())
 		synthesizedCount++
 	}
 
-	fmt.Printf("\nDone. %d synthesized, %d cached. Total: %d tokens.\n", synthesizedCount, cachedCount, totalTokens)
+	fmt.Fprintf(os.Stderr, "\nDone. %d synthesized, %d cached. Total: %d tokens.\n", synthesizedCount, cachedCount, totalTokens)
+
+	if outfmt.IsJSON(ctx) {
+		return outfmt.WriteJSON(ctx, os.Stdout, map[string]any{
+			"synthesized":  synthesizedCount,
+			"cached":       cachedCount,
+			"total_tokens": totalTokens,
+		})
+	}
+
 	return nil
 }
