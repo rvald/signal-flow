@@ -33,10 +33,10 @@ internal/
   app/           ← Service bootstrap (DB, repos, synthesizer, notifier)     ✅
   agent/         ← Conversational LLM agent with tool dispatch              ✅
     tools/       ← Typed tool definitions (harvest, query, status)           ✅
-  slackbot/      ← Slack Socket Mode event handler + Block Kit formatter    ⬜
+  slackbot/      ← Slack Socket Mode event handler + Block Kit formatter    ✅
 
 cmd/signal-flow/cli/
-  bot.go         ← `signal-flow bot start` command                          ⬜
+  bot.go         ← `signal-flow bot start` command                          ✅
 ```
 
 ---
@@ -73,19 +73,22 @@ LLM-powered agent with tool dispatch, session management, and context windowing.
 | `agent.go` | ✅ Done | `Agent`, `LLMClient` interface, `Handle()` loop with tool dispatch, 4 tests |
 | `session.go` | ✅ Done | `Session` with sliding window, `SessionStore` (thread-safe), 5 tests |
 
-### Phase 4: Slack Bot Event Handler (`internal/slackbot`) ⬜
+### Phase 4: Slack Bot Event Handler (`internal/slackbot`) ✅
 
-- Socket Mode event loop
-- Message handler → agent dispatch → Block Kit response
-- Per-user rate limiting
-- User → tenant resolution
+Socket Mode event handler with message routing and Block Kit formatting.
 
-### Phase 5: CLI Integration & Deployment ⬜
+| File | Status | Notes |
+|------|--------|-------|
+| `bot.go` | ✅ Done | Socket Mode event loop, message + app_mention handlers |
+| `handler.go` | ✅ Done | Routes messages to Agent, graceful error fallback, 3 tests |
+| `formatter.go` | ✅ Done | Text → Block Kit blocks, 2 tests |
 
-- `signal-flow bot start` command
-- Pipeline config updates for bot settings
-- Dockerfile and deployment configs
-- Documentation
+### Phase 5: CLI Integration & Deployment ✅
+
+| File | Status | Notes |
+|------|--------|-------|
+| `cli/bot.go` | ✅ Done | `signal-flow bot start` command |
+| `cli/root.go` | ✅ Modified | Registered `newBotCmd()` |
 
 ---
 
