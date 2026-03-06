@@ -1,3 +1,8 @@
+volumes:
+  signal_flow_data:
+  pgadmin_data:
+  ollama_data:
+
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -25,6 +30,21 @@ services:
     volumes:
       - pgadmin_data:/var/lib/pgadmin
 
-volumes:
-  signal_flow_data:
-  pgadmin_data:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: signal-flow-ollama
+    restart: always
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+  ollama-init:
+    image: curlimages/curl:latest
+    container_name: signal-flow-ollama-init
+    depends_on:
+      - ollama
+    entrypoint: ["/bin/sh", "/scripts/init-ollama.sh"]
+    volumes:
+      - ./scripts/init-ollama.sh:/scripts/init-ollama.sh:ro
+

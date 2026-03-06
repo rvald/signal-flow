@@ -41,7 +41,7 @@ func DefaultPipelineConfig() *PipelineConfig {
 	return &PipelineConfig{
 		Sources: []string{"bluesky"},
 		Synthesizer: SynthesizerConfig{
-			Provider: "gemini",
+			Provider: "ollama",
 			Effort:   "low",
 			Limit:    10,
 		},

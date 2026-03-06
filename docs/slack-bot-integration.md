@@ -2,27 +2,126 @@
 
 > Interactive Slack bot for Signal-Flow: users issue natural language commands, an LLM agent interprets and executes CLI operations, then responds with results.
 
-**Status:** Phase 1 complete, Phases 2–5 pending.
+**Status:** All phases complete. 42 tests across 5 packages.
 
 ---
 
-## Architecture
+## Request Lifecycle
 
 ```
-Slack (Socket Mode)
-    → Bot.HandleMessage(event)
-        → SessionStore.GetOrCreate(userID)
-        → Agent.Handle(session, message)
-            → LLM (interprets → tool calls)
-            → Tool.Execute(ctx, args)          // direct function calls
-            → LLM (synthesizes results → text)
-        → Bot.Reply(blocks)
+User types in Slack: "What signals did we find recently?"
+                          │
+                          ▼
+┌─────────────────────────────────────────────┐
+│  cli/bot.go — signal-flow bot start         │
+│  Validates SLACK_APP_TOKEN, SLACK_BOT_TOKEN │
+│  Builds: App → Tools → GeminiLLM → Agent   │
+└──────────────────┬──────────────────────────┘
+                   │ starts
+                   ▼
+┌─────────────────────────────────────────────┐
+│  slackbot/bot.go — Socket Mode Event Loop   │
+│  Receives Slack events via WebSocket        │
+│  Filters: ignores own msgs, edits, subtypes │
+│  Routes MessageEvent / AppMentionEvent      │
+└──────────────────┬──────────────────────────┘
+                   │ ev.User + ev.Text
+                   ▼
+┌─────────────────────────────────────────────┐
+│  slackbot/handler.go — HandleMessage()      │
+│  Trims whitespace, skips empty messages     │
+│  Gets/creates Session via SessionStore      │
+│  Delegates to Agent.Handle()                │
+│  On error → returns friendly fallback msg   │
+└──────────────────┬──────────────────────────┘
+                   │ (userID, text)
+                   ▼
+┌─────────────────────────────────────────────┐
+│  agent/agent.go — Handle() loop             │
+│                                             │
+│  1. Adds user message to Session            │
+│  2. Builds context:                         │
+│     [system prompt] + Session.Window()      │
+│  3. Calls LLMClient.Chat() with messages    │
+│     + tool schemas from Registry.Schema()   │
+│  4. If LLM returns text → done, return it   │
+│  5. If LLM returns ToolCalls:               │
+│     → execute each via Registry.Get()       │
+│     → feed results back as tool messages    │
+│     → loop back to step 3                   │
+│  6. Max 10 rounds to prevent infinite loops │
+└───────┬─────────────────────┬───────────────┘
+        │                     │
+   LLM call              Tool execution
+        │                     │
+        ▼                     ▼
+┌────────────────┐  ┌──────────────────────────┐
+│ agent/          │  │ agent/tools/              │
+│ gemini_client   │  │                          │
+│                 │  │ query_signals             │
+│ Converts:       │  │  → repo.FindRecentByTenant│
+│ Message → genai │  │                          │
+│ Schema → genai  │  │ pipeline_status           │
+│ FuncCall → Tool │  │  → pipeline.ReadRunLog    │
+│ Call            │  │                          │
+└────────────────┘  │ harvest (future)          │
+                    │  → harvestFn(ctx, source)  │
+                    └──────────────────────────┘
+        │
+        │ reply text
+        ▼
+┌─────────────────────────────────────────────┐
+│  slackbot/formatter.go — FormatBlocks()     │
+│  Converts text → Slack Block Kit            │
+│  (Markdown section blocks)                  │
+└──────────────────┬──────────────────────────┘
+                   │
+                   ▼
+          api.PostMessage(channel, blocks)
+                   │
+                   ▼
+          User sees response in Slack
 ```
 
-**Key decisions:**
-- **Thread-safe `SessionStore`** — per-user conversation context (inspired by [goclaw](../goclaw) Registry pattern)
-- **Direct tool execution** — no channel-based invoker; tools are local function calls with `context.WithTimeout`
-- **Socket Mode** — no public URL needed; simpler for dev and Docker
+---
+
+## Package Dependencies
+
+```
+cli/bot.go (composition root — wires everything)
+    │
+    ├── internal/app        ← DB pool, repos, summarizers, notifier
+    │       └── uses: config, domain, repository, intelligence, security, notify
+    │
+    ├── internal/agent      ← LLMClient interface + Agent loop + Sessions
+    │       ├── agent.go         Handle() loop, LLMClient interface
+    │       ├── session.go       Session (sliding window), SessionStore (thread-safe)
+    │       └── gemini_client.go GeminiLLMClient (genai adapter)
+    │
+    ├── internal/agent/tools ← Tool definitions + Registry
+    │       ├── tools.go          Tool, Param, Result, Registry
+    │       ├── harvest_tool.go   harvest + query_signals tools
+    │       └── status_tool.go    pipeline_status tool
+    │
+    └── internal/slackbot   ← Slack integration
+            ├── bot.go           Socket Mode event loop
+            ├── handler.go       Message → Agent routing
+            └── formatter.go     Text → Block Kit
+```
+
+---
+
+## Key Design Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| **Handler separated from Bot** | `Handler` is pure Go — testable with mock LLM. `Bot` has Slack SDK deps. |
+| **`LLMClient` interface** | Agent loop is provider-agnostic. Swap Gemini for Claude by implementing one method. |
+| **Session sliding window** | Token budget prevents context overflow. Oldest messages drop first. |
+| **Tool errors → LLM** | Instead of crashing, tool errors are fed back to the LLM so it can explain them. |
+| **`app.BuildSummarizers()` shared** | Both CLI pipeline and bot reuse the same provider-switching logic. |
+| **Direct function calls** | No channel-based invoker — tools are local calls with `context.WithTimeout` if needed. |
+| **Socket Mode** | No public URL needed; simpler for dev and Docker. |
 
 ---
 
@@ -72,6 +171,7 @@ LLM-powered agent with tool dispatch, session management, and context windowing.
 |------|--------|-------|
 | `agent.go` | ✅ Done | `Agent`, `LLMClient` interface, `Handle()` loop with tool dispatch, 4 tests |
 | `session.go` | ✅ Done | `Session` with sliding window, `SessionStore` (thread-safe), 5 tests |
+| `gemini_client.go` | ✅ Done | `GeminiLLMClient` adapter with function calling support |
 
 ### Phase 4: Slack Bot Event Handler (`internal/slackbot`) ✅
 
@@ -117,3 +217,82 @@ New variables required for the bot:
 | `SLACK_BOT_TOKEN` | `xoxb-...` token for API calls |
 
 Existing variables remain unchanged (`DATABASE_URL`, `ENCRYPTION_KEY`, `GEMINI_API_KEY`, etc.).
+
+---
+
+## Slack App Setup
+
+### 1. Create the App
+
+- Go to [api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **From scratch**
+- Name: `Signal-Flow Bot`, select your workspace
+
+### 2. Enable Socket Mode
+
+- Sidebar → **Socket Mode** → Toggle **ON**
+- Generate an App-Level Token (name: `signal-flow-socket`, scope: `connections:write`)
+- Copy → this is your **`SLACK_APP_TOKEN`** (`xapp-...`)
+
+### 3. Subscribe to Events
+
+- Sidebar → **Event Subscriptions** → Toggle **ON**
+- Under **Subscribe to bot events**, add:
+  - `message.channels` — hears messages in public channels
+  - `message.im` — hears direct messages
+  - `app_mention` — responds when @mentioned
+
+### 4. Set Bot Scopes
+
+- Sidebar → **OAuth & Permissions** → **Bot Token Scopes**:
+  - `chat:write` — post messages
+  - `channels:history` — read channel messages
+  - `im:history` — read DMs
+  - `app_mentions:read` — see @mentions
+
+### 5. Install to Workspace
+
+- Sidebar → **Install App** → **Install to Workspace** → Authorize
+- Copy the **Bot User OAuth Token** → this is your **`SLACK_BOT_TOKEN`** (`xoxb-...`)
+
+### 6. Invite & Run
+
+```bash
+# Invite the bot to a channel
+/invite @Signal-Flow Bot
+
+# Set environment variables
+export SLACK_APP_TOKEN=xapp-1-...
+export SLACK_BOT_TOKEN=xoxb-...
+export GEMINI_API_KEY=...
+export DATABASE_URL=postgres://...
+export ENCRYPTION_KEY=...
+
+# Start the bot
+signal-flow bot start
+```
+
+---
+
+## Pipeline Notifications (Incoming Webhook)
+
+Separate from the interactive bot, the pipeline can post one-way notifications after each run.
+
+### Setup
+
+1. In your Slack app → Sidebar → **Incoming Webhooks** → Toggle **ON**
+2. Click **Add New Webhook to Workspace**
+3. Pick the target channel (e.g. `#signals`) → **Allow**
+4. Copy the **Webhook URL** (`https://hooks.slack.com/services/T.../B.../...`)
+
+### Configure
+
+In `~/.config/signal-flow/pipeline.yaml`:
+
+```yaml
+notify:
+  channel: slack
+  webhook_url: "https://hooks.slack.com/services/T.../B.../..."
+  target: "#signals"
+```
+
+Then `signal-flow pipeline run` will post a summary to the channel after each run.

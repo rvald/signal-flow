@@ -22,7 +22,6 @@ import (
 	"github.com/rvald/signal-flow/internal/security"
 
 	"github.com/anthropics/anthropic-sdk-go"
-	"github.com/openai/openai-go/v3/shared"
 )
 
 // DevTenantID is the deterministic dev user UUID seeded by migration 000005.
@@ -196,13 +195,21 @@ func BuildSummarizers(ctx context.Context, providerName, effort string) (domain.
 		if apiKey == "" {
 			return nil, nil, fmt.Errorf("OPENAI_API_KEY env var is required")
 		}
-		flash := intelligence.NewOpenAISummarizer(apiKey, shared.ResponsesModel("gpt-4o-mini"))
+		flash := intelligence.NewOpenAISummarizer(apiKey, "gpt-4o-mini")
 		if effort == "high" {
-			reasoning := intelligence.NewOpenAISummarizer(apiKey, shared.ResponsesModel("o3-mini"))
+			reasoning := intelligence.NewOpenAISummarizer(apiKey, "o3-mini")
+			return flash, reasoning, nil
+		}
+		return flash, flash, nil
+	case "ollama":
+		baseURL := os.Getenv("OLLAMA_API_URL")
+		flash := intelligence.NewOllamaSummarizer(baseURL, "gemma3:4b")
+		if effort == "high" {
+			reasoning := intelligence.NewOllamaSummarizer(baseURL, "deepseek-r1:8b")
 			return flash, reasoning, nil
 		}
 		return flash, flash, nil
 	default:
-		return nil, nil, fmt.Errorf("invalid provider '%s': must be gemini, claude, or openai", providerName)
+		return nil, nil, fmt.Errorf("invalid provider '%s': must be gemini, claude, openai, or ollama", providerName)
 	}
 }

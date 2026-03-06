@@ -7,8 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anthropics/anthropic-sdk-go"
-	"github.com/openai/openai-go/v3/shared"
+	"github.com/rvald/signal-flow/internal/app"
 	"github.com/rvald/signal-flow/internal/domain"
 	"github.com/rvald/signal-flow/internal/intelligence"
 	"github.com/rvald/signal-flow/internal/outfmt"
@@ -30,7 +29,7 @@ Requires DATABASE_URL, ENCRYPTION_KEY, and the API key for your chosen provider.
 Effort tiers:
   low  - single-pass processing using a fast model (flash)
   high - two-pass processing: fast model for analysis, reasoning model for distillation.`,
-		Example: `  # Synthesize up to 10 signals with Gemini (default)
+		Example: `  # Synthesize up to 10 signals with Ollama (default)
   signal-flow synthesize
 
   # Use Claude with high effort
@@ -43,7 +42,7 @@ Effort tiers:
 		},
 	}
 
-	cmd.Flags().StringVar(&provider, "provider", "gemini", "LLM provider (gemini, claude, openai)")
+	cmd.Flags().StringVar(&provider, "provider", "ollama", "LLM provider (gemini, claude, openai, ollama)")
 	cmd.Flags().StringVar(&effort, "effort", "low", "synthesizer effort level: low (flash), high (reasoning)")
 	cmd.Flags().IntVarP(&limit, "limit", "l", 10, "maximum number of signals to process")
 	cmd.Flags().StringVar(&url, "url", "", "synthesize a specific signal by URL")
@@ -55,10 +54,10 @@ func runSynthesize(ctx context.Context, providerName, effort string, limit int, 
 	// --- Defensive checks ---
 	providerName = strings.ToLower(providerName)
 	switch providerName {
-	case "gemini", "claude", "openai":
+	case "gemini", "claude", "openai", "ollama":
 		// valid
 	default:
-		return fmt.Errorf("invalid provider '%s': must be gemini, claude, or openai", providerName)
+		return fmt.Errorf("invalid provider '%s': must be gemini, claude, openai, or ollama", providerName)
 	}
 
 	if effort != "low" && effort != "high" {
@@ -66,70 +65,14 @@ func runSynthesize(ctx context.Context, providerName, effort string, limit int, 
 	}
 
 	// --- Initialize Provider ---
-	var flash, reasoning domain.Summarizer
-	var apiKey string
-	var flashModel, reasoningModel string
-
-	switch strings.ToLower(providerName) {
-	case "gemini":
-		apiKey = os.Getenv("GEMINI_API_KEY")
-		if apiKey == "" {
-			return fmt.Errorf("GEMINI_API_KEY env var is required for the gemini provider")
-		}
-		flashModel = "gemma-3-4b"
-		reasoningModel = "gemma-3-27b"
-		f, err := intelligence.NewGeminiSummarizer(ctx, apiKey, flashModel)
-		if err != nil {
-			return fmt.Errorf("init gemini: %w", err)
-		}
-		flash = f
-		if effort == "high" {
-			r, err := intelligence.NewGeminiSummarizer(ctx, apiKey, reasoningModel)
-			if err != nil {
-				return fmt.Errorf("init gemini reasoning: %w", err)
-			}
-			reasoning = r
-		} else {
-			reasoning = f
-		}
-	case "claude":
-		apiKey = os.Getenv("ANTHROPIC_API_KEY")
-		if apiKey == "" {
-			return fmt.Errorf("ANTHROPIC_API_KEY env var is required for the claude provider")
-		}
-		flashModel = "claude-haiku-3-5"
-		reasoningModel = "claude-sonnet-4-5"
-		flash = intelligence.NewClaudeSummarizer(apiKey, anthropic.Model(flashModel))
-		if effort == "high" {
-			reasoning = intelligence.NewClaudeSummarizer(apiKey, anthropic.Model(reasoningModel))
-		} else {
-			reasoning = flash
-		}
-	case "openai":
-		apiKey = os.Getenv("OPENAI_API_KEY")
-		if apiKey == "" {
-			return fmt.Errorf("OPENAI_API_KEY env var is required for the openai provider")
-		}
-		flashModel = "gpt-4o-mini"
-		reasoningModel = "o3-mini"
-		flash = intelligence.NewOpenAISummarizer(apiKey, shared.ResponsesModel(flashModel))
-		if effort == "high" {
-			reasoning = intelligence.NewOpenAISummarizer(apiKey, shared.ResponsesModel(reasoningModel))
-		} else {
-			reasoning = flash
-		}
-	default:
-		return fmt.Errorf("invalid provider '%s': must be gemini, claude, or openai", providerName)
+	flash, reasoning, err := app.BuildSummarizers(ctx, providerName, effort)
+	if err != nil {
+		return fmt.Errorf("init summarizers: %w", err)
 	}
 
 	// Print configuration
 	fmt.Fprintf(os.Stderr, "Provider: %s\n", providerName)
-	fmt.Fprintf(os.Stderr, "  Analysis:     %s (always)\n", flashModel)
-	if effort == "high" {
-		fmt.Fprintf(os.Stderr, "  Distillation: %s (high effort)\n\n", reasoningModel)
-	} else {
-		fmt.Fprintf(os.Stderr, "  Distillation: %s (low effort)\n\n", flashModel)
-	}
+	fmt.Fprintf(os.Stderr, "Effort:   %s\n\n", effort)
 
 	// --- Connect to DB ---
 	db, cleanup, err := connectDB(ctx)
